@@ -57,7 +57,7 @@ create_data <- function(n_features,n_samples,n_subjects,A,feature_std,B,C,overal
     timeeff = C * rnorm(n_subjects*n_samples, mean = 0, sd = 1) #C * rnorm(n_subjects*n_samples)
     maineff = features_sample[[1]]$A
     
-    features_sample[[1]][,i] = maineff + feature_noise + subjecteff + timeeff 
+    features_sample[[1]][,i] = maineff + feature_noise + subjecteff + timeeff  # ONlY THIS IS RELEVANT
     features_sample[[1]][, paste("V", i, "_mean", sep = "")] <- subjecteff
     features_sample[[2]][,i] = maineff + feature_noise + timeeff 
     
@@ -89,7 +89,7 @@ run_simulation <- function(features_sample,cv,n_bootstrap,testsize, seed = "1236
   acc <- numeric(n_bootstrap)
   auc_value <- numeric(n_bootstrap)
   acc_rep <- numeric(n_bootstrap)
-  true_list <- list()  # To store true_sw for each iteration
+  true_list <- list()  
   pred_list <- list() 
   subject <- list() 
   ind <- list()
@@ -97,7 +97,7 @@ run_simulation <- function(features_sample,cv,n_bootstrap,testsize, seed = "1236
   acc_base <- numeric(n_bootstrap)
   auc_value_base <- numeric(n_bootstrap)
   acc_rep_base <- numeric(n_bootstrap)
-  true_list_base <- list()  # To store true_sw for each iteration
+  true_list_base <- list()  
   pred_list_base <- list() 
   ind_base <- list()
   
@@ -166,7 +166,7 @@ run_simulation <- function(features_sample,cv,n_bootstrap,testsize, seed = "1236
       ind_base[[i]] = data.frame(subject = subject[[i]], true = true_list_base[[i]], pred = pred_list_base[[i]])
       }
     }
-  } # end bootstrap
+  } # end bootstrap (we don't use the bootstrap in the paper)
 
   if(cv == "row-wise"){ 
     print(paste("Baseline Mean AUC:",mean(auc_value_base)))
@@ -223,11 +223,12 @@ run_simulation <- function(features_sample,cv,n_bootstrap,testsize, seed = "1236
 } 
 ############################################
 run_simulation_centering <- function(features_sample,cv,n_bootstrap,testsize, seed = "12361488"){
+  # Same function as before but this time we center the variables. In the shiny app we also include a function to center variables for the rolling window.
   set.seed(seed)
   acc <- numeric(n_bootstrap)
   auc_value <- numeric(n_bootstrap)
   acc_rep <- numeric(n_bootstrap)
-  true_list <- list()  # To store true_sw for each iteration
+  true_list <- list()  
   pred_list <- list() 
   subject <- list() 
   ind <- list()
@@ -235,7 +236,7 @@ run_simulation_centering <- function(features_sample,cv,n_bootstrap,testsize, se
   acc_base <- numeric(n_bootstrap)
   auc_value_base <- numeric(n_bootstrap)
   acc_rep_base <- numeric(n_bootstrap)
-  true_list_base <- list()  # To store true_sw for each iteration
+  true_list_base <- list()  
   pred_list_base <- list() 
   ind_base <- list()
   
@@ -269,7 +270,7 @@ run_simulation_centering <- function(features_sample,cv,n_bootstrap,testsize, se
     feature_names = colnames(features_sample)[1:10]
    
   
-    # Center the training set
+    # Center the training set based on means in the training set
     subject_means <- features_sample[samples_train, ] %>%
      group_by(subject) %>%
      summarise(across(all_of(names(train_X)), mean), .groups = "drop")
