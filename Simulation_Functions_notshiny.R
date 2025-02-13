@@ -25,10 +25,7 @@ create_data <- function(n_features,n_samples,n_subjects,A,feature_std,B,C,overal
   prob_l = rep(prob_l, each = n_samples) 
   
   if (time_effect) {
-    # NEEDS TO BE ADDED
-   # t_effect = seq(-1, 1, length.out = n_samples)
-    #t_effect = rep(t_effect, times = n_subjects)
-    #prob_matrix = 1/(1+exp(-(prob_l+t_effect)))
+    #Can be added in the future
   } else {
     prob_matrix = prob_l
   }
@@ -77,17 +74,6 @@ create_data <- function(n_features,n_samples,n_subjects,A,feature_std,B,C,overal
     }
     
   }
-  # Center the training set
-  # subject_means <- features_sample[[1]] %>%
-  #   group_by(subject) %>%
-  #   summarise(across(all_of(colnames(features_sample[[1]][,1:10])), mean), .groups = "drop")
-  # 
-  # # Center the training set
-  # features_sample[[3]] <- features_sample[[1]] %>%
-  #   left_join(subject_means, by = "subject", suffix = c("", "_mean")) %>%
-  #   mutate(across(all_of(colnames(features_sample[[1]][,1:10])), ~ . - get(paste0(cur_column(), "_mean")))) %>%
-  #   select(all_of(colnames(features_sample[[1]][,1:10])),"subject","time","y","A")
-  
   return(features_sample)
 }
 
@@ -283,44 +269,24 @@ run_simulation_centering <- function(features_sample,cv,n_bootstrap,testsize, se
     feature_names = colnames(features_sample)[1:10]
    
   
-    # # Center the training set
-    # subject_means <- features_sample[samples_train, ] %>%
-    #  group_by(subject) %>%
-    #  summarise(across(all_of(names(train_X)), mean), .groups = "drop")
-    # # 
-    # # subject_means <- data.frame(subject = unique(features_sample[[id_variable]]))
-    # # 
-    # # for(j in 1:n_features){
-    # #   subject_means$variable[j] <- feature_names[j]
-    # # 
-    # #   model_pred <- lmer(as.formula(paste0(feature_names[j], "~ 1 + ( 1  |", id_variable,")")), data = features_sample[samples_train,])
-    # #   # Extract the random effects for the current feature
-    # #   ranef_means <- as.data.frame(ranef(model_pred)$subject)
-    # # 
-    # #   # Add the feature-specific random effects to the subject_means data frame
-    # #   subject_means[[paste(feature_names[j],"_mean",sep ='')]] <- ranef_means[, 1]
-    # # 
-    # # }
-    # 
-    # 
-    # # subject_means <- features_sample %>%
-    # #   select(subject, 14:24) %>%
-    # #   distinct(subject, .keep_all = TRUE)
-    # 
-    # # Center the training set
-    # train_X <- features_sample[samples_train, ] %>%
-    #   left_join(subject_means, by = "subject", suffix = c("", "_mean")) %>%
-    #   mutate(across(all_of(names(train_X)), ~ . - get(paste0(cur_column(), "_mean")))) %>%
-    #   select(all_of(names(train_X)))
-    # 
-    # # Center the test set using training set means
-    # test_X <- features_sample[samples_test, ] %>%
-    #   left_join(subject_means, by = "subject", suffix = c("", "_mean")) %>%
-    #   mutate(across(all_of(names(train_X)), ~ . - get(paste0(cur_column(), "_mean")))) %>%
-    #   select(all_of(names(train_X)))
-    
-    
+    # Center the training set
+    subject_means <- features_sample[samples_train, ] %>%
+     group_by(subject) %>%
+     summarise(across(all_of(names(train_X)), mean), .groups = "drop")
+
+    # Center the training set
+    train_X <- features_sample[samples_train, ] %>%
+      left_join(subject_means, by = "subject", suffix = c("", "_mean")) %>%
+      mutate(across(all_of(names(train_X)), ~ . - get(paste0(cur_column(), "_mean")))) %>%
+      select(all_of(names(train_X)))
+
+    # Center the test set using training set means
+    test_X <- features_sample[samples_test, ] %>%
+      left_join(subject_means, by = "subject", suffix = c("", "_mean")) %>%
+      mutate(across(all_of(names(train_X)), ~ . - get(paste0(cur_column(), "_mean")))) %>%
+      select(all_of(names(train_X)))
     }
+    
     # Train and evaluate the Random Forest model  
     if(cv == "row-wise"){
       RF <- randomForest(train_X,train_Y)

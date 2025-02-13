@@ -12,4 +12,6 @@ The code provided here replicates the analysis and results discussed in the pape
 
 -   **simulation_results.csv**: Dataset containing the results from the simulations.
 
+-   **simulation_results_baseline.csv**: Dataset containing the results from the simulations for the baseline model.
+
 -   **Figures/**: Directory containing all figures used in the paper.

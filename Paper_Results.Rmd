@@ -1,5 +1,5 @@
 ---
-title: "Paper_Examples"
+title: "Paper_Results"
 output: html_document
 date: "2025-01-20"
 editor_options: 
@@ -9,17 +9,15 @@ editor_options:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(randomForest)
-library(R.matlab)
-library(foreach)
-library(doParallel)
 library(dplyr)
 library(lme4)
-library(tseries)
 library(caret)
 library(pROC)
-library(boot)
 library(patchwork)
 ```
+## General Information
+This R Markdown file can be used to replicate our results that are presented in the paper. Please note that it does not contain the shiny app.
+
 
 ## Pitfall 1: Within person performance
 
@@ -28,14 +26,13 @@ library(patchwork)
 ##################################
 
 # Basic Parameters from Study
-n_features <- 10 # FIXED IN SAEB
-n_samples <- 90  # Timepoints/ RECORDS (fixed in saeb) Number of samples per subject
-n_subjects <- 150 # SUBJECTS (VARIED 4 TO 32) # Needs to be an even number
+n_features <- 10  # Features
+n_samples <- 90  # Timepoints
+n_subjects <- 150 # Subjects
 
 # Generating Outcome
 overall_prob_outcome <- 0.1  # Overall probability of 1 (for the entire dataset) (e.g., tracking depression 0.146)
-sqrt(overall_prob_outcome*(1-overall_prob_outcome))
-sd_outcome <- 0.2 # Controls variability BETWEEN different subject (e.g., tracking depression 0.21)
+sd_outcome <- 0.2 # Controls variability BETWEEN different subject (nneds to be smaller than sqrt(overall_prob_outcome*(1-overall_prob_outcome)))
 
 # Generating Features
 A <- 0.05 # Relationship between features and outcome
@@ -43,10 +40,10 @@ feature_std <- 0.1 # population level feature generating process
 B <- 0.8  # Cross-subject variability ("random effect") (added per participants for all timepoints)
 C <- 0.2 # Within-subject variability (added within participant for each timepoint)
 
-source("/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/Simulation_Functions_notshiny.R")
+source("Simulation_Functions_notshiny.R")
 
 set.seed(12361488)
-features_sample <- create_data(n_features,n_samples,n_subjects,A,feature_std,B,C,overall_prob_outcome,sd_outcome,time_effect)
+features_sample <- create_data(n_features,n_samples,n_subjects,A,feature_std,B,C,overall_prob_outcome,sd_outcome,time_effect = FALSE)
 features_sample <- features_sample[[1]]
 
 sim_1 <- run_simulation(features_sample,"row-wise",1, testsize = 0.3)
@@ -67,7 +64,7 @@ table
 ############# Figure 4 #################
 ########################################
 
-result <- read.csv("/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/simulation_results.csv")
+result <- read.csv("simulation_results.csv") # see Run_Simulation.R to investigate how results were created
 
 p1 <- ggplot(result[result$A == 0,], aes(x=icc, y=auc, color = icc_pred)) +
   geom_point(alpha=0.4, size = 0.8) +
@@ -97,7 +94,7 @@ p1 <- ggplot(result[result$A == 0,], aes(x=icc, y=auc, color = icc_pred)) +
   # Adding a diagonal line to illustrate the linear relationship
   geom_abline(slope = 0.5, intercept = 0.52, color = "#FE4365",  size = 0.8)
 
-ggsave(  "/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/Example2.jpg",
+ggsave("Figures/Example2.jpg",
   plot = p1,
   width = 10.2,
   height = 4.5)
@@ -115,7 +112,7 @@ sd(result$auc_individual[result$A == 0])
 ```{r}
 ############# Figure 5 #################
 ########################################
-result <- read.csv("/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/simulation_results.csv")
+result <- read.csv("simulation_results.csv")
 
 result <- result[result$A != 0 & result$A != 0.8,]
 
@@ -180,29 +177,18 @@ combined_plot <- (p3 / p4) +
   ) 
 combined_plot
 
-ggsave(  "/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/Example4.jpg",
+ggsave(  "Figures/Example4.jpg",
   plot = combined_plot,
   width = 10.2,
   height = 5.5)
 
-
-mean(result$auc)
-mean(result$auc_c)
-
-mean(result$auc_c_individual)
-mean(result$auc_individual)
-
-test <- result$auc_c-result$auc
-sum((test > 0)/length(test))
-
-unique(result$A)
 ```
 
 
 ```{r}
 ############# Figure 6 #################
 ########################################
-result <- read.csv("/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/simulation_results.csv")
+result <- read.csv("simulation_results.csv")
 result <- result[result$A != 0 & result$A != 0.8,]
 p1 <- ggplot(result, aes(x=auc_c, y=auc_c_individual, color = icc_pred)) +
   geom_point(alpha=0.5, size = 1) +
@@ -249,7 +235,7 @@ combined_plot <- (p2 / p1) +
   ) 
 combined_plot
 
-ggsave(  "/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/Example3.jpg",
+ggsave( "Figures/Example3.jpg",
   plot = combined_plot,
   width = 11.5,
   height = 6.5)
@@ -306,7 +292,7 @@ p2 <- ggplot(data, aes(x = time, y = y)) +
 
 p2
 
-ggsave(  "/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/Example_var.jpg",
+ggsave( "Figures/Example_var.jpg",
   plot = p2,
   width = 8,
   height = 7)
@@ -319,8 +305,6 @@ ggsave(  "/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmo
 ```{r }
 ############ Table 5 #############
 ##################################
-
-
 sim_1$auc_value_base # row-wise
 sim_4$auc_value_base # rolling window
 
@@ -346,7 +330,7 @@ mean(test$auc_val)
 ############ Figure 8 #############
 ##################################
 
-result = read.csv("/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/simulation_results_baseline.csv")
+result = read.csv("simulation_results_baseline.csv")
 p7 <- ggplot(result, aes(x=icc, y=auc_value_base)) +
   geom_point(alpha=0.5, size = 1.2, color = "#83AF9B") +
   #scale_size(range = c(.001, 6), name="") +
@@ -375,7 +359,7 @@ p7 <- ggplot(result, aes(x=icc, y=auc_value_base)) +
     curvature = 0.2
   ) 
 
-ggsave(  "/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/figure7.jpg",
+ggsave(  "Figures/figure7.jpg",
   plot = p7,
   width = 10,
   height = 5)
