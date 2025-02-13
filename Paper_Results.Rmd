@@ -1,0 +1,385 @@
+---
+title: "Paper_Examples"
+output: html_document
+date: "2025-01-20"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(randomForest)
+library(R.matlab)
+library(foreach)
+library(doParallel)
+library(dplyr)
+library(lme4)
+library(tseries)
+library(caret)
+library(pROC)
+library(boot)
+library(patchwork)
+```
+
+## Pitfall 1: Within person performance
+
+```{r }
+############ Table 3 #############
+##################################
+
+# Basic Parameters from Study
+n_features <- 10 # FIXED IN SAEB
+n_samples <- 90  # Timepoints/ RECORDS (fixed in saeb) Number of samples per subject
+n_subjects <- 150 # SUBJECTS (VARIED 4 TO 32) # Needs to be an even number
+
+# Generating Outcome
+overall_prob_outcome <- 0.1  # Overall probability of 1 (for the entire dataset) (e.g., tracking depression 0.146)
+sqrt(overall_prob_outcome*(1-overall_prob_outcome))
+sd_outcome <- 0.2 # Controls variability BETWEEN different subject (e.g., tracking depression 0.21)
+
+# Generating Features
+A <- 0.05 # Relationship between features and outcome
+feature_std <- 0.1 # population level feature generating process
+B <- 0.8  # Cross-subject variability ("random effect") (added per participants for all timepoints)
+C <- 0.2 # Within-subject variability (added within participant for each timepoint)
+
+source("/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/Simulation_Functions_notshiny.R")
+
+set.seed(12361488)
+features_sample <- create_data(n_features,n_samples,n_subjects,A,feature_std,B,C,overall_prob_outcome,sd_outcome,time_effect)
+features_sample <- features_sample[[1]]
+
+sim_1 <- run_simulation(features_sample,"row-wise",1, testsize = 0.3)
+sim_2 <- run_simulation_centering(features_sample,"row-wise",1,testsize = 0.3)
+sim_3 <- run_simulation(features_sample,"subject-wise",1, testsize = 0.3)
+sim_4 <- run_simulation_slidingwindow(features_sample,1,windowsize = 14)
+
+table <- rbind(sim_1$overall_summary,sim_3$overall_summary, sim_4$overall_summary)
+table$'AUC Overall' <- c(sim_1$auc_value,sim_3$auc_value,sim_4$auc_value)
+colnames(table) <-  c("Mean AUC within-person:", "SD AUC within-person:", "% of AUC > 0.5 within-person:", "N included within-person:", "AUC Overall")
+rownames(table) <- c("row-wise","subject-wise","rolling-window")
+table <- round(table[,c(5,1,2,3,4)], 2)
+table
+```
+
+
+```{r}
+############# Figure 4 #################
+########################################
+
+result <- read.csv("/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/simulation_results.csv")
+
+p1 <- ggplot(result[result$A == 0,], aes(x=icc, y=auc, color = icc_pred)) +
+  geom_point(alpha=0.4, size = 0.8) +
+  theme_minimal() +
+  scale_colour_gradientn(colours = c("#2A363B","#83AF9B","#C8C8A9","#F9CDAD","#FC9D9A","#FE4365")) +
+  ylab("Prediction Performance (Overall AUC)") +
+  xlab("% of Total Variation Explained by Between Person Differences in the Outcome \n(ICC Outcome)") +
+  guides(col = guide_colourbar(title = "% of Total Variation Explained by \nBetween Person Differences \nin Predictors (ICC Predictor)")) +
+  ggtitle("Bias in Performance Estimates (AUC) When No Relationship Exists: Expected AUC = 0.5") +
+  geom_hline(yintercept = 0.5, color = "#83AF9B", size = 0.8) +
+  annotate("text", x = 0.07, y = 0.82, label =  "Greater bias when between person differences explain a \nlarger % of total variation in both outcome and predictors.",  hjust = 0) +
+  geom_curve(
+    aes(x = 0.4, y = 0.85, xend = 0.68, yend = 0.87), 
+    arrow = arrow(length = unit(0.08, "inch")), 
+    size = 0.3, 
+    color = "gray20", 
+    curvature = -0.2
+  ) + 
+  annotate("text", x = 0.38, y = 0.54, label = "Low bias if between person differences explain a small \n% of total variation in outcome, predictors, or both.",  hjust = 0) +
+    geom_curve(
+    aes(x = 0.37, y = 0.54, xend = 0.33, yend = 0.51), 
+    arrow = arrow(length = unit(0.08, "inch")), 
+    size = 0.3, 
+    color = "gray20", 
+    curvature = 0.1
+  ) +
+  # Adding a diagonal line to illustrate the linear relationship
+  geom_abline(slope = 0.5, intercept = 0.52, color = "#FE4365",  size = 0.8)
+
+ggsave(  "/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/Example2.jpg",
+  plot = p1,
+  width = 10.2,
+  height = 4.5)
+
+p1
+
+mean(result$auc_individual[result$A == 0])
+sd(result$auc_individual[result$A == 0])
+mean(result$auc_c[result$A == 0])
+sd(result$auc_c[result$A == 0])
+sd(result$auc_individual[result$A == 0])
+
+```
+
+```{r}
+############# Figure 5 #################
+########################################
+result <- read.csv("/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/simulation_results.csv")
+
+result <- result[result$A != 0 & result$A != 0.8,]
+
+p3 <- ggplot(result, aes(x = icc, y = auc_c_individual - auc_individual)) +
+  geom_point(aes(color = ifelse(auc_c_individual - auc_individual > 0, "Above Zero", "Below or Equal to Zero")), 
+             alpha = 0.3, size = 0.8, show.legend = FALSE) +
+  scale_color_manual(values = c("Above Zero" = "#FC9D9A", "Below or Equal to Zero" = "#83AF9B")) +
+  theme_minimal() +
+  ylab("Performance Difference \n(centered - uncentered)") +
+  xlab("% of Total Variation Explained by Between Person Differences in the Outcome (ICC Outcome)") +
+  ggtitle("Within-Person Performance") +
+  geom_hline(yintercept = 0) + 
+  annotate("text", x = 0, y = 0.28, label = "Centered predictors perform better in most cases (within-person)", hjust = 0) +
+  annotate("text", x = 0, y = -0.08, label = "Uncentered predictors perform worse in most cases (within-person)", hjust = 0) +
+  ylim(c(-0.45,0.35)) +
+  geom_curve(
+    aes(x = -0.01, y = 0.01, xend = -0.01, yend = 0.25), 
+    arrow = arrow(length = unit(0.08, "inch")), 
+    size = 0.5, 
+    color = "#FC9D9A", 
+    curvature = 0
+  ) +
+    geom_curve(
+    aes(x = -0.01, y = 0.01, xend = -0.01, yend = -0.1), 
+    arrow = arrow(length = unit(0.08, "inch")), 
+    size = 0.5, 
+    color = "#83AF9B", 
+    curvature = 0
+  ) 
+
+p4 <- ggplot(result, aes(x = icc, y = auc_c - auc)) +
+  geom_point(aes(color = ifelse(auc_c - auc > 0, "Above Zero", "Below or Equal to Zero")), 
+             alpha = 0.3, size = 0.8,show.legend = FALSE) +
+  scale_color_manual(values = c("Above Zero" = "#FC9D9A", "Below or Equal to Zero" = "#83AF9B")) +
+  theme_minimal() +
+  ylab("Performance Difference \n(centered - uncentered)") +
+  xlab("% of Total Variation Explained by Between Person Differences in the Outcome (ICC Outcome)") +
+  ggtitle("") +
+  geom_hline(yintercept = 0) + 
+  annotate("text", x = 0, y = 0.28, label = "Centered predictors perform better when between person differences explain a small % of total variance (overall)", hjust = 0) +
+  annotate("text", x = 0.01, y = -0.39, label = "Uncentered predictors perform better when between person differences explain a large % of total variance (overall)", hjust = 0) +
+  ylim(c(-0.45,0.35)) +
+   ggtitle("Overall Performance (Within and Between-Person)")  +
+    geom_curve(
+    aes(x = -0.01, y = 0.01, xend = -0.01, yend = 0.27), 
+    arrow = arrow(length = unit(0.08, "inch")), 
+    size = 0.5, 
+    color = "#FC9D9A", 
+    curvature = 0
+  ) +
+    geom_curve(
+    aes(x = 0.8, y = 0.01, xend = 0.8, yend = -0.41), 
+    arrow = arrow(length = unit(0.08, "inch")), 
+    size = 0.5, 
+    color = "#83AF9B", 
+    curvature = 0
+  ) 
+
+combined_plot <- (p3 / p4) +
+  plot_annotation(
+    title = "Performance difference: centered vs. not-centered",
+  ) 
+combined_plot
+
+ggsave(  "/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/Example4.jpg",
+  plot = combined_plot,
+  width = 10.2,
+  height = 5.5)
+
+
+mean(result$auc)
+mean(result$auc_c)
+
+mean(result$auc_c_individual)
+mean(result$auc_individual)
+
+test <- result$auc_c-result$auc
+sum((test > 0)/length(test))
+
+unique(result$A)
+```
+
+
+```{r}
+############# Figure 6 #################
+########################################
+result <- read.csv("/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/simulation_results.csv")
+result <- result[result$A != 0 & result$A != 0.8,]
+p1 <- ggplot(result, aes(x=auc_c, y=auc_c_individual, color = icc_pred)) +
+  geom_point(alpha=0.5, size = 1) +
+  #scale_size(range = c(.001, 6), name="") +
+  theme_minimal() +
+  scale_colour_gradientn(colours = c("#2A363B","#83AF9B","#C8C8A9","#F9CDAD","#FC9D9A","#FE4365")) +
+  ylab("AUC within-person centered") +
+  xlab("AUC centered") +
+  guides(col = guide_colourbar(title = "% of Total Variation Explained by \nBetween Person Differences \nin Predictors (ICC Predictor)")) +
+  geom_hline(yintercept = 0.5)   + 
+annotate("text", x = 0.5, y = 0.9, label = "Linear relationship between overall AUC \nand within-person AUC",  hjust = 0) +
+  geom_curve(
+    aes(x = 0.63, y = 0.87, xend = 0.75, yend = 0.8), 
+    arrow = arrow(length = unit(0.08, "inch")), 
+    size = 0.3, 
+    color = "gray20", 
+    curvature = -0.15
+  ) +
+  ggtitle("Uncentered Predictors")
+  
+p2 <- ggplot(result, aes(x=auc, y=auc_individual, color = icc_pred)) +
+  geom_point(alpha=0.5, size = 1) +
+  #scale_size(range = c(.001, 6), name="") +
+  theme_minimal() +
+  scale_colour_gradientn(colours = c("#2A363B","#83AF9B","#C8C8A9","#F9CDAD","#FC9D9A","#FE4365")) +
+  ylab("AUC within-person") +
+  xlab("AUC") +
+  guides(col = guide_colourbar(title = "% of Total Variation Explained by \nBetween Person Differences \nin Predictors (ICC Predictor)")) +
+  geom_hline(yintercept = 0.5) + 
+annotate("text", x = 0.5, y = 0.9, label = "If between person differences explain a large % of variation in predictors and outcome,\nthe overall AUC becomes high while the within-person AUC remains low.",  hjust = 0) +
+  geom_curve(
+    aes(x = 0.75, y = 0.82, xend = 0.9, yend = 0.6), 
+    arrow = arrow(length = unit(0.08, "inch")), 
+    size = 0.3, 
+    color = "gray20", 
+    curvature = 0.35
+  ) +
+  ggtitle("Centered Predictors")
+
+
+combined_plot <- (p2 / p1) +
+  plot_annotation(
+    title = "Relationship Overall AUC and within-person AUC (A = 0.05 and A = 0.2)",
+  ) 
+combined_plot
+
+ggsave(  "/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/Example3.jpg",
+  plot = combined_plot,
+  width = 11.5,
+  height = 6.5)
+```
+
+
+## Pitfall 2: Mismatch between chosen cross-validation strategy, employment, and actual observations 
+```{r }
+############ Table 7 #############
+##################################
+
+# Merge the p-values with the original dataset for plotting
+data <- features_sample 
+
+# Compute mean y for each subject and reorder factor levels in ascending order
+subject_stats <- data %>%
+  group_by(subject) %>%
+  summarize(mean_y = mean(y, na.rm = TRUE),
+            has_y1 = any(y == 1)) %>%  # Identify if subject has any y = 1
+  arrange(mean_y)  
+
+# Convert subject to a factor with the same levels as in data
+subject_stats$subject <- factor(subject_stats$subject, levels = subject_stats$subject)
+
+# Count the number of subjects with at least one y = 1
+num_subjects_with_y1 <- sum(subject_stats$has_y1)
+
+# Apply the new factor levels to data
+data <- data %>%
+  mutate(subject = factor(subject, levels = subject_stats$subject))
+
+# Merge "has_y1" information into the main dataset
+data <- left_join(data, subject_stats, by = "subject")
+
+# Create the sorted plot with conditional background color
+p2 <- ggplot(data, aes(x = time, y = y)) +
+  # Add background shading for subjects with y = 1
+  geom_rect(
+    data = data %>% filter(!has_y1),
+    aes(xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf),
+    fill = "#E5E4E2", alpha = 0.05, inherit.aes = T
+  ) +
+  geom_point(color = "#FC9D9A", size = 0.5) +                       
+  facet_wrap(~subject) +               
+  labs(
+    x = "Time", 
+    y = "Outcome", 
+    title = paste("Within-person variability over time: \n88 participants (58.6%) do not experience within-person variability. ")
+  ) +
+  scale_y_continuous(breaks = c(0, 1)) +  # Ensure only 0 and 1 appear on the y-axis
+  theme_minimal() +
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank()) +
+  guides(fill = "none") 
+
+p2
+
+ggsave(  "/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/Example_var.jpg",
+  plot = p2,
+  width = 8,
+  height = 7)
+
+```
+
+
+## Pitfall 3: Weak benchmark and missing baseline comparison
+
+```{r }
+############ Table 5 #############
+##################################
+
+
+sim_1$auc_value_base # row-wise
+sim_4$auc_value_base # rolling window
+
+
+sim_4$auc_value
+
+
+test <- sim_1$ind_base[[1]] %>%
+  group_by(subject) %>%
+  filter(length(unique(true)) > 1) %>%
+  filter(sum(true == 1) > 0, sum(true == 0) > 0) %>%
+  summarise(
+    auc_val = auc(roc(as.numeric(as.character(true)), as.numeric(as.character(pred)), quiet = TRUE))[1],
+    .groups = "drop" # Ungroup after summarizing
+  )
+
+mean(test$auc_val)
+
+```
+
+
+```{r }
+############ Figure 8 #############
+##################################
+
+result = read.csv("/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/simulation_results_baseline.csv")
+p7 <- ggplot(result, aes(x=icc, y=auc_value_base)) +
+  geom_point(alpha=0.5, size = 1.2, color = "#83AF9B") +
+  #scale_size(range = c(.001, 6), name="") +
+  theme_minimal() +
+  scale_colour_gradientn(colours = c("#83AF9B")) +
+  ylab("Overall Performance (AUC)") +
+  xlab("% of Total Variation Explained by Between Person Differences in the Outcome (ICC Outcome)") +
+  guides(col = guide_colourbar()) +
+  ggtitle(paste("Performance of a Random Intercept Only Model (No Predictors Included)")) +
+  geom_hline(yintercept = 0.5) +
+  ylim(range= c(0.5,1)) +
+    annotate("text", x = 0.5, y = 0.82, label =  "Performance increases as between person differences explain a \nlarger % of total variation in the outcome",  hjust = 0) +
+  geom_curve(
+    aes(x = 0.7, y = 0.85, xend = 0.5, yend = 0.91), 
+    arrow = arrow(length = unit(0.08, "inch")), 
+    size = 0.3, 
+    color = "gray20", 
+    curvature = 0.2
+  ) +
+      annotate("text", x = 0.2, y = 0.62, label =  "Performance can be moderate even if between person differences explain only a relatively \nsmall % of total variation in the outcome",  hjust = 0) +
+  geom_curve(
+    aes(x = 0.19, y = 0.62, xend = 0.07, yend = 0.61), 
+    arrow = arrow(length = unit(0.08, "inch")), 
+    size = 0.3, 
+    color = "gray20", 
+    curvature = 0.2
+  ) 
+
+ggsave(  "/Users/f007qrc/Library/CloudStorage/GoogleDrive-anna.m.langener@dartmouth.edu/My Drive/Darmouth Drive/ML CrossValidation Project/figure7.jpg",
+  plot = p7,
+  width = 10,
+  height = 5)
+
+```
+
+
