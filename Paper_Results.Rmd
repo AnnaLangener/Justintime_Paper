@@ -94,7 +94,7 @@ p1 <- ggplot(result[result$A == 0,], aes(x=icc, y=auc, color = icc_pred)) +
   # Adding a diagonal line to illustrate the linear relationship
   geom_abline(slope = 0.5, intercept = 0.52, color = "#FE4365",  size = 0.8)
 
-ggsave("Figures/Example2.jpg",
+ggsave("Figures/Figure4_Example2.jpg",
   plot = p1,
   width = 10.2,
   height = 4.5)
@@ -177,7 +177,7 @@ combined_plot <- (p3 / p4) +
   ) 
 combined_plot
 
-ggsave(  "Figures/Example4.jpg",
+ggsave(  "Figures/Figure5_Example4.jpg",
   plot = combined_plot,
   width = 10.2,
   height = 5.5)
@@ -235,7 +235,7 @@ combined_plot <- (p2 / p1) +
   ) 
 combined_plot
 
-ggsave( "Figures/Example3.jpg",
+ggsave( "Figures/Figure6_Example3.jpg",
   plot = combined_plot,
   width = 11.5,
   height = 6.5)
@@ -292,7 +292,7 @@ p2 <- ggplot(data, aes(x = time, y = y)) +
 
 p2
 
-ggsave( "Figures/Example_var.jpg",
+ggsave( "Figures/Figure7_Example_var.jpg",
   plot = p2,
   width = 8,
   height = 7)
@@ -359,7 +359,7 @@ p7 <- ggplot(result, aes(x=icc, y=auc_value_base)) +
     curvature = 0.2
   ) 
 
-ggsave(  "Figures/figure7.jpg",
+ggsave(  "Figures/Figure8.jpg",
   plot = p7,
   width = 10,
   height = 5)
