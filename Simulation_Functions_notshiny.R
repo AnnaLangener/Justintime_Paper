@@ -2,13 +2,55 @@
 ### Simulation Functions #####
 ##############################
 
+### Helper Function ####
+
 estBetaParams <- function(mu, var) {
   alpha <- ((1 - mu) / var - 1 / mu) * mu ^ 2
   beta <- alpha * (1 / mu - 1)
   return(params = list(alpha = alpha, beta = beta))
 } #taken from https://stats.stackexchange.com/questions/12232/calculating-the-parameters-of-a-beta-distribution-using-the-mean-and-variance/12239#12239
 
-create_data <- function(n_features,n_samples,n_subjects,A,feature_std,B,C,overall_prob_outcome,sd_outcome,time_effect){
+
+#### Dependencies over time ####
+# The functions to create dependencies over time are adapted from 
+# Bringmann et al., "Changing dynamics: TV-AR models using generalized additive modeling"
+
+## Probability varies over time and follows a sinus function
+sine<-function(n_samples,time_effect,participant_mean, timevariability){ # TempDepen is the maximum absolute value of the function (time effect).  
+
+  genfun=rep(NA,(n_samples)) 
+  tt=1:(n_samples) #Defining a time parameter in order to create the sine function.
+  
+  genfun=(time_effect*participant_mean)*sin(timevariability*pi*tt/(n_samples)) + participant_mean #Here the actual sine function is created, we add TempDepen to have a value between 0 and 1       
+  
+  return(genfun)
+} 
+
+# ## AR 1 (still needs to be adapted)
+# 
+# AR1<-function(n_samples,beta_0,beta_1,sd_innovation, prob_ind){
+#   y<-rep(NA,n_samples) 
+# 
+#   y[1]<-rbinom(n_samples, size = 1, prob = prob_ind)
+# 
+#   for (t in 2:NT){ #In this for-loop the time points 2 to NT are created.
+#     #beta_0 is the intercept, beta_1 the autoregressive coefficient.
+#     #rnorm(1,mean=0,sd=sd_innovation) is the innovation or error drawn from a normal distribution with mean zero and standard deviation (sd)
+#     #sd_innovation (standard deviation of the innovation; 1 in this case, thus variance and sd are the same here).
+#     y[t]<-exp(beta_0*prob_ind+beta_1*y[t-1]+rnorm(1,mean=0,sd=sd_innovation)
+#     
+#     
+#   }
+# 
+#   return(y)
+# }
+
+
+
+
+
+########## MAIN FUNCTIONS #############
+create_data <- function(n_features,n_samples,n_subjects,A,feature_std,B,C,overall_prob_outcome,sd_outcome,time_effect,timevariability){
   
   y <- vector("numeric", length = n_subjects * n_samples) 
   subject_id <- rep(1:n_subjects, each = n_samples)  # Repeat subject IDs for each timepoint
@@ -17,18 +59,35 @@ create_data <- function(n_features,n_samples,n_subjects,A,feature_std,B,C,overal
   
   # Simulate Outcome
   para <- estBetaParams(overall_prob_outcome,sd_outcome^2)
+  
   prob_l <- rbeta(n=n_subjects ,shape1 = para$alpha, shape2 = para$beta) # sample probability for each subject
   
-  print(paste("Mean prob:",mean(prob_l)))
-  print(paste("SD prob:",sd(prob_l)))
-  
   prob_l = rep(prob_l, each = n_samples) 
+  # 
+  # time_prob = c()
+  # for(i in 1:length(prob_l)){
+  # time_prob = c(time_prob,sine(n_samples,time_effect,prob_l[i],timevariability))
+  # }
   
-  if (time_effect) {
-    #Can be added in the future
-  } else {
-    prob_matrix = prob_l
+  if(overall_prob_outcome > 0.5){
+  time_prob = 1- sine(n_samples,time_effect,1-prob_l,timevariability)
+  }else{
+  time_prob = sine(n_samples,time_effect,prob_l,timevariability)
   }
+  
+  if(time_effect > 0){
+  prob_matrix = time_prob # add time effect
+  }else{
+  prob_matrix = prob_l
+  }
+  
+  #plot(time_prob[1000:2000])
+  # #plot(prob_l[0:1000])
+  # plot(prob_matrix)
+  
+  print(paste("Mean prob:",mean(prob_matrix)))
+  print(paste("SD prob:",sd(prob_matrix)))
+  
   
   data$y <- rbinom(n_subjects * n_samples, size = 1, prob = prob_matrix) #sample 0 or 1 for each subject & timepoint, prob_matrix indicates the probability for each subject
   data$A = data$y
@@ -36,6 +95,7 @@ create_data <- function(n_features,n_samples,n_subjects,A,feature_std,B,C,overal
   # Simulate Features (adapted from Saeb et al. and https://aosmith.rbind.io/2018/04/23/simulate-simulate-part-2/)
   data$A[data$y == 0] = -A # relationship to outcome
   data$A[data$y == 1] = A
+  data$prob = prob_matrix
   
   features_sample <- list()
   
@@ -47,6 +107,8 @@ create_data <- function(n_features,n_samples,n_subjects,A,feature_std,B,C,overal
   
   features_sample[[1]] <- features_sample_ABCstd
   features_sample[[2]] <- features_sample_Astd
+  
+
   
   for (i in 1:n_features) {
     
@@ -136,12 +198,13 @@ run_simulation <- function(features_sample,cv,n_bootstrap,testsize, seed = "1236
     if(cv == "subject-wise" | cv == "row-wise"){
       RF <- randomForest(train_X,train_Y)
       class_pred <- predict(RF, test_X)
+      class_pred_auc <- predict(RF, test_X,type="prob")[,2]
       acc[i] <- mean(as.numeric(as.character(class_pred)) == test_Y)
       
       true_list[[i]]<- test_Y
-      pred_list[[i]] <- as.numeric(as.character(class_pred))
-      roc_curve <- roc(test_Y,  as.numeric(as.character(class_pred)),quiet = TRUE)
-      auc_value[i] <- auc(roc_curve)
+      pred_list[[i]] <- class_pred_auc
+      roc_curve <- pROC::roc(test_Y,  class_pred_auc, quiet = TRUE,direction = "<")
+      auc_value[i] <- pROC::auc(roc_curve)[1]
       
       ind[[i]] = data.frame(subject = subject[[i]], true = true_list[[i]], pred = pred_list[[i]])
       
@@ -157,8 +220,8 @@ run_simulation <- function(features_sample,cv,n_bootstrap,testsize, seed = "1236
       
       true_list_base[[i]]<- test_Y
       pred_list_base[[i]] <- as.numeric(as.character(class_pred_base))
-      roc_curve_base <- roc(test_Y,  as.numeric(as.character(class_pred_base)),quiet = TRUE)
-      auc_value_base[i] <- auc(roc_curve_base)
+      roc_curve_base <- pROC::roc(test_Y,  as.numeric(as.character(class_pred_base)),quiet = TRUE,direction = "<")
+      auc_value_base[i] <- pROC::auc(roc_curve_base)
       
       class_pred_base2 <- ifelse(class_pred_base > 0.5, 1, 0)
       acc_base[i] <- mean(as.numeric(as.character(class_pred_base2)) == test_Y)
@@ -181,7 +244,7 @@ run_simulation <- function(features_sample,cv,n_bootstrap,testsize, seed = "1236
       filter(length(unique(true)) > 1) %>%
       filter(sum(true == 1) > 0, sum(true == 0) > 0) %>%
       summarise(
-        auc_val = auc(roc(as.numeric(as.character(true)), as.numeric(as.character(pred)), quiet = TRUE))[1],
+        auc_val = pROC::auc(pROC::roc(as.numeric(as.character(true)), as.numeric(as.character(pred)),direction = "<"))[1],
         .groups = "drop" # Ungroup after summarizing
       )
     
@@ -292,13 +355,15 @@ run_simulation_centering <- function(features_sample,cv,n_bootstrap,testsize, se
     if(cv == "row-wise"){
       RF <- randomForest(train_X,train_Y)
       class_pred <- predict(RF, test_X)
+      class_pred_auc <- predict(RF, test_X,type="prob")[, 2]
+      
       acc[i] <- mean(as.numeric(as.character(class_pred)) == test_Y)
       
       true_list[[i]]<- test_Y
-      pred_list[[i]] <- as.numeric(as.character(class_pred))
-      roc_curve <- roc(test_Y,  as.numeric(as.character(class_pred)),quiet = TRUE)
-      auc_value[i] <- auc(roc_curve)
-      
+      pred_list[[i]] <- class_pred_auc
+      roc_curve <- pROC::roc(as.numeric(as.character(test_Y)),  as.numeric(as.character(class_pred_auc)), direction = "<")
+      auc_value[i] <- pROC::auc(roc_curve)
+
       ind[[i]] = data.frame(subject = subject[[i]], true = true_list[[i]], pred = pred_list[[i]])
       
       # Baseline model for row-wise CV
@@ -313,8 +378,8 @@ run_simulation_centering <- function(features_sample,cv,n_bootstrap,testsize, se
         
         true_list_base[[i]]<- test_Y
         pred_list_base[[i]] <- as.numeric(as.character(class_pred_base))
-        roc_curve_base <- roc(test_Y,  as.numeric(as.character(class_pred_base)),quiet = TRUE)
-        auc_value_base[i] <- auc(roc_curve_base)
+        roc_curve_base <- pROC::roc(test_Y,  as.numeric(as.character(class_pred_base)),quiet = TRUE,direction = "<")
+        auc_value_base[i] <- pROC::auc(roc_curve_base)
         
         class_pred_base2 <- ifelse(class_pred_base > 0.5, 1, 0)
         acc_base[i] <- mean(as.numeric(as.character(class_pred_base2)) == test_Y)
@@ -337,7 +402,7 @@ run_simulation_centering <- function(features_sample,cv,n_bootstrap,testsize, se
       filter(length(unique(true)) > 1) %>%
       filter(sum(true == 1) > 0, sum(true == 0) > 0) %>%
       summarise(
-        auc_val = auc(roc(as.numeric(as.character(true)), as.numeric(as.character(pred)), quiet = TRUE))[1],
+        auc_val = pROC::auc(pROC::roc(as.numeric(as.character(true)), as.numeric(as.character(pred)), direction = "<"))[1],
         .groups = "drop" # Ungroup after summarizing
       )
     
@@ -447,11 +512,13 @@ run_simulation_slidingwindow <- function(features_sample,n_bootstrap,windowsize)
       
       RF <- randomForest(train_X,train_Y)
       class_pred <- predict(RF, test_X)
+      class_pred_auc <- predict(RF, test_X,type="prob")[, 2]
+      
       acc_sw[k] <- mean(as.numeric(as.character(class_pred)) == test_Y)
       
       if (length(unique(test_Y)) == 2) {
-        roc_curve <- roc(test_Y, as.numeric(as.character(class_pred)), quiet = TRUE)
-        auc_value_sw[k] <- auc(roc_curve)
+        roc_curve <- pROC::roc(test_Y, class_pred_auc, quiet = TRUE,direction = "<")
+        auc_value_sw[k] <- pROC::auc(roc_curve)
       } else {
         auc_value_sw[k] <- NA
       }
@@ -461,7 +528,7 @@ run_simulation_slidingwindow <- function(features_sample,n_bootstrap,windowsize)
         data.frame(
           subject = as.character(features_sample$subject[features_sample$time %in% testSlices[[k]]]),
           true = test_Y,                                   
-          pred = class_pred
+          pred = class_pred_auc
         )
       )
       
@@ -475,8 +542,8 @@ run_simulation_slidingwindow <- function(features_sample,n_bootstrap,windowsize)
       class_pred_base <- predict(Baseline, newdata = features_sample[features_sample$time %in% testSlices[[k]],], re.form = ~(1 | subject), type = "response")
 
       if (length(unique(test_Y)) == 2) {
-        roc_curve_base <- roc(test_Y,  as.numeric(as.character(class_pred_base)),quiet = TRUE)
-        auc_value_base_sw[k] <- auc(roc_curve_base)
+        roc_curve_base <- pROC::roc(test_Y,  as.numeric(as.character(class_pred_base)),quiet = TRUE,direction = "<")
+        auc_value_base_sw[k] <- pROC::auc(roc_curve_base)
       } else {
         auc_value_base_sw[k] <- NA
       }
@@ -498,11 +565,11 @@ run_simulation_slidingwindow <- function(features_sample,n_bootstrap,windowsize)
       
     }
     
-    auc_value[i] <- auc(roc(as.numeric(as.character(ind_t$true)), as.numeric(as.character(ind_t$pred)), quiet = TRUE))
+    auc_value[i] <- pROC::auc(pROC::roc(as.numeric(as.character(ind_t$true)), as.numeric(as.character(ind_t$pred)), direction = "<"))
     auc_value_meansw[i] <- mean(auc_value_sw,na.rm = TRUE)
     ind[[i]] <- ind_t
     ind_base[[i]] <- ind_t_base
-    auc_value_base[i] <- auc(roc(as.numeric(as.character(ind_t_base$true)), as.numeric(as.character(ind_t_base$pred)), quiet = TRUE))
+    auc_value_base[i] <- pROC::auc(pROC::roc(as.numeric(as.character(ind_t_base$true)), as.numeric(as.character(ind_t_base$pred)),direction = "<"))
   } # end bootstrap
  
   
@@ -512,7 +579,7 @@ run_simulation_slidingwindow <- function(features_sample,n_bootstrap,windowsize)
       filter(length(unique(true)) > 1) %>%
       filter(sum(true == 1) > 0, sum(true == 0) > 0) %>%
       summarise(
-        auc_val = auc(roc(as.numeric(as.character(true)), as.numeric(as.character(pred)), quiet = TRUE))[1],
+        auc_val = pROC::auc(pROC::roc(as.numeric(as.character(true)), as.numeric(as.character(pred)),direction = "<"))[1],
         .groups = "drop" # Ungroup after summarizing
       )
     

@@ -19,31 +19,103 @@ library(patchwork)
 This R Markdown file can be used to replicate our results that are presented in the paper. Please note that it does not contain the shiny app.
 
 
-## Pitfall 1: Within person performance
+## Pitfall 1: Within person performance Emprircal Example
+```{r }
+### Descriptives
+
+# Read the CSV files
+final_results_df_2_b <- read.csv("final_results_df_2_b.csv")
+final_results_df_3_b <- read.csv("final_results_df_3_b.csv")
+final_results_df_4_b <- read.csv("final_results_df_4_b.csv")
+final_results_df_5_b <- read.csv("final_results_df_5_b.csv")
+
+# Select specific columns
+cols_to_select1 <- c("outcome", "overall_prob_outcome", "sd_outcome",
+                  "icc_data")
+cols_to_select <- c("overall_prob_outcome", "sd_outcome",
+                   "icc_data")
+
+df2_selected <- final_results_df_2_b[, cols_to_select1]
+df3_selected <- final_results_df_3_b[, cols_to_select]
+df4_selected <- final_results_df_4_b[, cols_to_select]
+df5_selected <- final_results_df_5_b[, cols_to_select]
+
+# Rename columns to distinguish between dataframes (optional but recommended)
+names(df2_selected) <- paste0(names(df2_selected), "_df2")
+names(df3_selected) <- paste0(names(df3_selected), "_df3")
+names(df4_selected) <- paste0(names(df4_selected), "_df4")
+names(df5_selected) <- paste0(names(df5_selected), "_df5")
+
+# Combine the selected dataframes column-wise
+combined_df <- cbind(df2_selected, df3_selected, df4_selected, df5_selected)
+
+# View or write the combined data frame
+head(combined_df)
+
+combined_df <- combined_df %>%
+  mutate(across(where(is.numeric), ~ round(.x, 2)))
+write.csv(combined_df, "combined_des_binary.csv", row.names = FALSE)
+
+
+
+# Read the CSV files
+final_results_df_2 <- read.csv("final_results_df_2.csv")
+final_results_df_3 <- read.csv("final_results_df_3.csv")
+final_results_df_4 <- read.csv("final_results_df_4.csv")
+final_results_df_5 <- read.csv("final_results_df_5.csv")
+
+# Select specific columns
+cols_to_select1 <- c("outcome", "overall_prob_outcome", "sd_outcome",
+                  "icc_data")
+cols_to_select <- c("overall_prob_outcome", "sd_outcome",
+                   "icc_data")
+
+df2_selected <- final_results_df_2[, cols_to_select1]
+df3_selected <- final_results_df_3[, cols_to_select]
+df4_selected <- final_results_df_4[, cols_to_select]
+df5_selected <- final_results_df_5[, cols_to_select]
+
+# Rename columns to distinguish between dataframes (optional but recommended)
+names(df2_selected) <- paste0(names(df2_selected), "_df2")
+names(df3_selected) <- paste0(names(df3_selected), "_df3")
+names(df4_selected) <- paste0(names(df4_selected), "_df4")
+names(df5_selected) <- paste0(names(df5_selected), "_df5")
+
+# Combine the selected dataframes column-wise
+combined_df <- cbind(df2_selected, df3_selected, df4_selected, df5_selected)
+
+# View or write the combined data frame
+head(combined_df)
+
+combined_df <- combined_df %>%
+  mutate(across(where(is.numeric), ~ round(.x, 2)))
+write.csv(combined_df, "combined_des_continious.csv", row.names = FALSE)
+
+```
 
 ```{r }
-############ Table 3 #############
-##################################
+############ Table 4 #############
+####### Simulation Study #########
 
 # Basic Parameters from Study
 n_features <- 10  # Features
-n_samples <- 90  # Timepoints
+n_samples <- 200  # Timepoints
 n_subjects <- 150 # Subjects
 
 # Generating Outcome
 overall_prob_outcome <- 0.1  # Overall probability of 1 (for the entire dataset) (e.g., tracking depression 0.146)
-sd_outcome <- 0.2 # Controls variability BETWEEN different subject (nneds to be smaller than sqrt(overall_prob_outcome*(1-overall_prob_outcome)))
+sd_outcome <- 0.25 # Controls variability BETWEEN different subject (nneds to be smaller than sqrt(overall_prob_outcome*(1-overall_prob_outcome)))
 
 # Generating Features
 A <- 0.05 # Relationship between features and outcome
 feature_std <- 0.1 # population level feature generating process
 B <- 0.8  # Cross-subject variability ("random effect") (added per participants for all timepoints)
-C <- 0.2 # Within-subject variability (added within participant for each timepoint)
+C <- 0.45 # Within-subject variability (added within participant for each timepoint)
 
 source("Simulation_Functions_notshiny.R")
 
 set.seed(12361488)
-features_sample <- create_data(n_features,n_samples,n_subjects,A,feature_std,B,C,overall_prob_outcome,sd_outcome,time_effect = FALSE)
+features_sample <- create_data(n_features,n_samples,n_subjects,A,feature_std,B,C,overall_prob_outcome,sd_outcome,0,0)
 features_sample <- features_sample[[1]]
 
 sim_1 <- run_simulation(features_sample,"row-wise",1, testsize = 0.3)
@@ -59,41 +131,299 @@ table <- round(table[,c(5,1,2,3,4)], 2)
 table
 ```
 
+```{r }
+############ Table 5 #############
+############# Binary #############
+
+source("Simulation_UploadData.R")
+data = read.csv("esm_clean.csv")
+set.seed(1234)
+
+data = data  %>% group_by %>%
+  group_by(user_id) %>%
+  mutate(day = row_number())
+
+data <- data %>%
+  group_by(user_id) %>%
+  filter(n_distinct(day) >= 150) %>%
+  ungroup()
+data = data[data$day <= 150,]
+
+sampled_ids <- sample(unique(data$user_id), size = 20, replace = FALSE)
+
+data <- data %>% 
+  filter(user_id %in% sampled_ids)
+
+data$user_id <- sapply(data$user_id, match, unique(unlist(data$user_id)))
+
+
+id_variable = "user_id"   
+time_variable = "day"
+
+colnames(data)[colnames(data) == "user_id"] <- "subject"
+colnames(data)[colnames(data) == "day"]     <- "time"
+#colnames(data)[colnames(data) == "wantedToFeel_goodAboutMe"]  <- "y"
+
+data <- data %>%
+  group_by(subject) %>%
+  mutate(y = lag(wantedToFeel_goodAboutMe, n = 1))
+
+data <- data[!is.na(data$y),]
+
+## Run strategies
+r_1 <- run_simulation_own(
+  features_sample = data,
+  cv              = "record-wise",
+  n_bootstrap     = 1,
+  testsize        = 0.3,
+  n_features      =  c("feelingBadToGood", "energy", 
+                       "thinkingOverAndOver", "lonely", "selfWorth", "appreciating", "stressed"),
+  seed = 1234
+  
+)
+
+r_3 <- run_simulation_own(
+  features_sample = data,
+  cv              = "subject-wise",
+  n_bootstrap     = 1,
+  testsize        = 0.3,
+  n_features      =  c("feelingBadToGood", "energy", 
+                       "thinkingOverAndOver", "lonely", "selfWorth", "appreciating", "stressed"),
+  seed = 1234
+  
+)
+r_4 <- run_simulation_slidingwindow_own(
+  features_sample = data,
+  n_bootstrap     = 1,
+  windowsize      = 14,
+  n_features      = c("feelingBadToGood", "energy",
+                      "thinkingOverAndOver", "lonely", "selfWorth", "appreciating", "stressed"),
+  seed = 1234
+)
+
+
+table <- rbind(r_1$overall_summary,r_3$overall_summary, r_4$overall_summary)
+table$'AUC Overall' <- c(r_1$auc_value,r_3$auc_value,r_4$auc_value)
+colnames(table) <-  c("Mean AUC within-person:", "SD AUC within-person:", "% of AUC > 0.5 within-person:", "N included within-person:", "AUC Overall")
+rownames(table) <- c("row-wise","subject-wise","rolling-window")
+table
+```
+
+
+```{r }
+############ Table 5 #############
+############# Continious #########
+
+source("Simulation_continous.R")
+
+data = read.csv("esm_clean.csv")
+set.seed(1234)
+
+data = data  %>% group_by %>%
+  group_by(user_id) %>%
+  mutate(day = row_number())
+
+data <- data %>%
+  group_by(user_id) %>%
+  filter(n_distinct(day) >= 150) %>%
+  ungroup()
+data = data[data$day <= 150,]
+
+sampled_ids <- sample(unique(data$user_id), size = 20, replace = FALSE)
+
+data <- data %>% 
+  filter(user_id %in% sampled_ids)
+
+data$user_id <- sapply(data$user_id, match, unique(unlist(data$user_id)))
+
+
+id_variable = "user_id"   
+time_variable = "day"
+
+colnames(data)[colnames(data) == "user_id"] <- "subject"
+colnames(data)[colnames(data) == "day"]     <- "time"
+#colnames(data)[colnames(data) == "wantedToFeel_goodAboutMe"]  <- "y"
+
+data <- data %>%
+  group_by(subject) %>%
+  mutate(y = lag(lonely, n = 1))
+
+data <- data[!is.na(data$y),]
+
+## Run strategies
+r_1 <- run_simulation_own(
+  features_sample = data,
+  cv              = "record-wise",
+  n_bootstrap     = 1,
+  testsize        = 0.3,
+  n_features      =  c("feelingBadToGood", "energy", 
+                       "thinkingOverAndOver", "selfWorth", "appreciating", "stressed"),
+  seed = 1234
+  
+)
+
+r_3 <- run_simulation_own(
+  features_sample = data,
+  cv              = "subject-wise",
+  n_bootstrap     = 1,
+  testsize        = 0.3,
+  n_features      =  c("feelingBadToGood", "energy", 
+                       "thinkingOverAndOver", "selfWorth", "appreciating", "stressed"),
+  seed = 1234
+  
+)
+r_4 <- run_simulation_slidingwindow_own(
+  features_sample = data,
+  n_bootstrap     = 1,
+  windowsize      = 14,
+  n_features      = c("feelingBadToGood", "energy",
+                      "thinkingOverAndOver", "selfWorth", "appreciating", "stressed"),
+  seed = 1234
+)
+
+table <- rbind(
+  r_1[c("rsq", "cor", "overall_summary.mean_r2", "overall_summary.mean_cor", "overall_summary.sd")],
+  r_3[c("rsq", "cor", "overall_summary.mean_r2", "overall_summary.mean_cor", "overall_summary.sd")],
+  r_4[c("rsq", "cor", "overall_summary.mean_r2", "overall_summary.mean_cor", "overall_summary.sd")]
+)
+
+table <- round(table[,c(5,1,2,3,4)], 2)
+table
+```
+
+
+
+
+```{r }
+## Try out
+
+# Basic Parameters from Study
+n_features <- 10  # Features
+n_samples <- 200  # Timepoints
+n_subjects <- 15 # Subjects
+
+# Generating Outcome
+overall_prob_outcome <- 0.4  # Overall probability of 1 (for the entire dataset) (e.g., tracking depression 0.146)
+sd_outcome <- 0.3 # Controls variability BETWEEN different subject (nneds to be smaller than sqrt(overall_prob_outcome*(1-overall_prob_outcome)))
+
+# Generating Features
+A <- 0.02 # Relationship between features and outcome
+feature_std <- 0.1 # population level feature generating process
+B <- 0.8  # Cross-subject variability ("random effect") (added per participants for all timepoints)
+C <- 0.2 # Within-subject variability (added within participant for each timepoint)
+
+source("Simulation_Functions_notshiny.R")
+
+set.seed(12361488)
+features_sample <- create_data(n_features, n_samples, n_subjects, A, feature_std, B, C, overall_prob_outcome, sd_outcome, 0,0)
+
+features_sample <- features_sample[[1]]
+
+sim_1 <- run_simulation(features_sample,"row-wise",1, testsize = 0.3)
+
+table <- rbind(sim_1$overall_summary)
+table$'AUC Overall' <- c(sim_1$auc_value)
+
+table
+
+library(dplyr)
+library(ggplot2)
+
+pred_true = as.data.frame(sim_1$ind)
+
+
+
+pred_true <- pred_true %>%
+  arrange(subject, true) %>%
+  group_by(subject) %>%
+  mutate(day = row_number())
+
+
+library(pROC)
+library(dplyr)
+
+# Compute individual AUC
+ind_auc <- pred_true %>%
+  group_by(subject) %>%
+  filter(length(unique(true)) > 1) %>%
+  filter(sum(true == 1) > 0, sum(true == 0) > 0) %>%
+  summarise(
+    auc_val = pROC::auc(pROC::roc(response = true, predictor = pred, direction = "<",positive = "1", levels = c(0,1)))[1],
+    .groups = "drop"
+  )
+
+# Merge AUCs back into pred_true
+pred_true <- left_join(pred_true, ind_auc, by = "subject")
+pred_true$auc_val = round(pred_true$auc_val,2)
+pred_true$auc_val[is.na(pred_true$auc_val)] = "-"
+
+pred_true$pred  = ifelse(pred_true$pred  > 0.5, 1, 0)
+
+
+
+# Add prediction correctness column
+pred_true <- pred_true %>%
+  mutate(prediction_correct = ifelse(true == pred, "Correct", "Incorrect")) # CHECK AGAIN IF PREDICTION IS 0/1 !!!
+
+
+plot = ggplot(pred_true, aes(day, subject, color = factor(true), shape = prediction_correct)) + 
+  geom_point(size = 2, alpha = 0.8) +
+  geom_text(aes(label = ifelse(!duplicated(subject), paste("AUC: ", auc_val), "")),
+            x = -Inf, hjust = 0, size = 3, color = "gray40") +  # AUC on the left side
+  scale_color_manual(values = c("0" = "#FFB5A7", "1" = "#40916C")) +
+  scale_shape_manual(values = c("Correct" = 15, "Incorrect" = 0)) +
+  labs(color = NULL, shape = NULL) +  # Removes legend titles
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "bottom",
+    axis.text.y = element_blank(),
+    axis.text.x = element_blank()     # Removes x-axis tick labels
+  ) +
+  xlim(-6, 75) +
+  labs(y = paste0("Within-Person"), x = "") +
+  ggtitle(paste("AUC evaluated over the whole dataset:", round(table$'AUC Overall', 2), "(Between-Person)")) +
+  theme(text = element_text('Futura'),axis.title=element_text(size=14)) 
+plot
+ggsave("WithinBetween_Example.png", 
+       width = 6100, height = 3000, units = "px", dpi = 800,plot = plot)
+
+
+```
+
+
 
 ```{r}
 ############# Figure 4 #################
 ########################################
 
-result <- read.csv("simulation_results.csv") # see Run_Simulation.R to investigate how results were created
+result <- read.csv("simulation_results_0.csv") # see Run_Simulation.R to investigate how results were created
 
-p1 <- ggplot(result[result$A == 0,], aes(x=icc, y=auc, color = icc_pred)) +
+p1 <- ggplot(result[result$A == 0,], aes(x=icc, y=auc, color = icc_pred)) + # color: icc_pred
   geom_point(alpha=0.4, size = 0.8) +
   theme_minimal() +
-  scale_colour_gradientn(colours = c("#2A363B","#83AF9B","#C8C8A9","#F9CDAD","#FC9D9A","#FE4365")) +
+  scale_colour_gradientn(colours = c("#1B4332", "#40916C", "#74C69D", "#B5E48C", "#FDE68A", "#FFB5A7")) +
   ylab("Prediction Performance (Overall AUC)") +
   xlab("% of Total Variation Explained by Between Person Differences in the Outcome \n(ICC Outcome)") +
   guides(col = guide_colourbar(title = "% of Total Variation Explained by \nBetween Person Differences \nin Predictors (ICC Predictor)")) +
   ggtitle("Bias in Performance Estimates (AUC) When No Relationship Exists: Expected AUC = 0.5") +
-  geom_hline(yintercept = 0.5, color = "#83AF9B", size = 0.8) +
   annotate("text", x = 0.07, y = 0.82, label =  "Greater bias when between person differences explain a \nlarger % of total variation in both outcome and predictors.",  hjust = 0) +
   geom_curve(
-    aes(x = 0.4, y = 0.85, xend = 0.68, yend = 0.87), 
+    aes(x = 0.2, y = 0.86, xend = 0.35, yend = 0.93), 
     arrow = arrow(length = unit(0.08, "inch")), 
     size = 0.3, 
     color = "gray20", 
     curvature = -0.2
   ) + 
-  annotate("text", x = 0.38, y = 0.54, label = "Low bias if between person differences explain a small \n% of total variation in outcome, predictors, or both.",  hjust = 0) +
+  annotate("text", x = 0.38, y = 0.58, label = "Low bias if between person differences explain a small \n% of total variation in outcome, predictors, or both.",  hjust = 0) +
     geom_curve(
-    aes(x = 0.37, y = 0.54, xend = 0.33, yend = 0.51), 
+    aes(x = 0.37, y = 0.55, xend = 0.33, yend = 0.51), 
     arrow = arrow(length = unit(0.08, "inch")), 
     size = 0.3, 
     color = "gray20", 
     curvature = 0.1
-  ) +
+  ) 
   # Adding a diagonal line to illustrate the linear relationship
-  geom_abline(slope = 0.5, intercept = 0.52, color = "#FE4365",  size = 0.8)
-
 ggsave("Figures/Figure4_Example2.jpg",
   plot = p1,
   width = 10.2,
@@ -110,145 +440,176 @@ sd(result$auc_individual[result$A == 0])
 ```
 
 ```{r}
-############# Figure 5 #################
+############# Figure 5 BINARY #################
 ########################################
-result <- read.csv("simulation_results.csv")
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(patchwork)
 
-result <- result[result$A != 0 & result$A != 0.8,]
+final_results_df_2_b = read.csv("final_results_df_2_b.csv")
+final_results_df_3_b = read.csv("final_results_df_3_b.csv")
+final_results_df_4_b = read.csv("final_results_df_4_b.csv")
+final_results_df_5_b = read.csv("final_results_df_5_b.csv")
 
-p3 <- ggplot(result, aes(x = icc, y = auc_c_individual - auc_individual)) +
-  geom_point(aes(color = ifelse(auc_c_individual - auc_individual > 0, "Above Zero", "Below or Equal to Zero")), 
-             alpha = 0.3, size = 0.8, show.legend = FALSE) +
-  scale_color_manual(values = c("Above Zero" = "#FC9D9A", "Below or Equal to Zero" = "#83AF9B")) +
-  theme_minimal() +
-  ylab("Performance Difference \n(centered - uncentered)") +
-  xlab("% of Total Variation Explained by Between Person Differences in the Outcome (ICC Outcome)") +
-  ggtitle("Within-Person Performance") +
-  geom_hline(yintercept = 0) + 
-  annotate("text", x = 0, y = 0.28, label = "Centered predictors perform better in most cases (within-person)", hjust = 0) +
-  annotate("text", x = 0, y = -0.08, label = "Uncentered predictors perform worse in most cases (within-person)", hjust = 0) +
-  ylim(c(-0.45,0.35)) +
-  geom_curve(
-    aes(x = -0.01, y = 0.01, xend = -0.01, yend = 0.25), 
-    arrow = arrow(length = unit(0.08, "inch")), 
-    size = 0.5, 
-    color = "#FC9D9A", 
-    curvature = 0
-  ) +
-    geom_curve(
-    aes(x = -0.01, y = 0.01, xend = -0.01, yend = -0.1), 
-    arrow = arrow(length = unit(0.08, "inch")), 
-    size = 0.5, 
-    color = "#83AF9B", 
-    curvature = 0
-  ) 
+plot_data = function(data_viz, spanpar){
+  # Reshape to long format
+  df_long <- data_viz %>%
+    pivot_longer(
+      cols = c(`shuffle_AUC.`, `movingwindowshuffle_AUC.`),
+      names_to = "AUC_type",
+      values_to = "AUC"
+    )
+  
+  p = ggplot(df_long, aes(x = icc_data, y = AUC, color = AUC_type)) +
+    geom_point(alpha = 0.8, size = 1) +
+    geom_smooth(se = FALSE, method = "loess", span = spanpar) +
+    theme_minimal() +
+    scale_color_manual(
+      values = c(
+        "shuffle_AUC." = "#40916C",
+        "movingwindowshuffle_AUC." = "#4D8FAC"
+      ), 
+      labels = c(
+        "shuffle_AUC." = "No true Relationship (Record-Wise)",
+        "movingwindowshuffle_AUC." = "No true Relationship (Moving-Window)"
+      )
+    ) +
+    geom_hline(yintercept = 0.5, color = "grey", size = 0.8) +
+    labs(color = "") +
+    ylim(0.4, 0.95) +
+    ggtitle(paste0("N: ", max(data_viz$num_subjects),
+                   ", Timepoints: ", max(data_viz$num_samples),
+                   ",\nICC Predictors (mean): ", round(data_viz$icc_pred, 2))) +
+    ylab("Overall AUC") +
+    xlab("ICC Outcome")
+  
+  return(p)
+}
 
-p4 <- ggplot(result, aes(x = icc, y = auc_c - auc)) +
-  geom_point(aes(color = ifelse(auc_c - auc > 0, "Above Zero", "Below or Equal to Zero")), 
-             alpha = 0.3, size = 0.8,show.legend = FALSE) +
-  scale_color_manual(values = c("Above Zero" = "#FC9D9A", "Below or Equal to Zero" = "#83AF9B")) +
-  theme_minimal() +
-  ylab("Performance Difference \n(centered - uncentered)") +
-  xlab("% of Total Variation Explained by Between Person Differences in the Outcome (ICC Outcome)") +
-  ggtitle("") +
-  geom_hline(yintercept = 0) + 
-  annotate("text", x = 0, y = 0.28, label = "Centered predictors perform better when between person differences explain a small % of total variance (overall)", hjust = 0) +
-  annotate("text", x = 0.01, y = -0.39, label = "Uncentered predictors perform better when between person differences explain a large % of total variance (overall)", hjust = 0) +
-  ylim(c(-0.45,0.35)) +
-   ggtitle("Overall Performance (Within and Between-Person)")  +
-    geom_curve(
-    aes(x = -0.01, y = 0.01, xend = -0.01, yend = 0.27), 
-    arrow = arrow(length = unit(0.08, "inch")), 
-    size = 0.5, 
-    color = "#FC9D9A", 
-    curvature = 0
-  ) +
-    geom_curve(
-    aes(x = 0.8, y = 0.01, xend = 0.8, yend = -0.41), 
-    arrow = arrow(length = unit(0.08, "inch")), 
-    size = 0.5, 
-    color = "#83AF9B", 
-    curvature = 0
-  ) 
+spanpar = 0.6
 
-combined_plot <- (p3 / p4) +
+p2 = plot_data(final_results_df_2_b, spanpar)
+p3 = plot_data(final_results_df_3_b, spanpar)
+p4 = plot_data(final_results_df_4_b, spanpar)
+p5 = plot_data(final_results_df_5_b, spanpar)
+
+# Combine all plots and collect legends at the bottom
+final_plot <- (p2 + p3 + p4 + p5) + 
+  plot_layout(ncol = 2, guides = "collect") & 
+  theme(legend.position = "bottom")
+
+# Add title and optional styling
+final_plot <- final_plot +
   plot_annotation(
-    title = "Performance difference: centered vs. not-centered",
-  ) 
-combined_plot
+    title = "Predictive Performance Shuffled Data Binary Outcomes",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
+    )
+  )
 
-ggsave(  "Figures/Figure5_Example4.jpg",
-  plot = combined_plot,
-  width = 10.2,
-  height = 5.5)
-
+print(final_plot)
+ggsave("Figures/Figure5_NullModelBinary.jpg",
+  plot = final_plot,
+  width = 7,
+  height = 6)
 ```
 
-
 ```{r}
-############# Figure 6 #################
+############# Figure 6 Continiuous #################
 ########################################
-result <- read.csv("simulation_results.csv")
-result <- result[result$A != 0 & result$A != 0.8,]
-p1 <- ggplot(result, aes(x=auc_c, y=auc_c_individual, color = icc_pred)) +
-  geom_point(alpha=0.5, size = 1) +
-  #scale_size(range = c(.001, 6), name="") +
-  theme_minimal() +
-  scale_colour_gradientn(colours = c("#2A363B","#83AF9B","#C8C8A9","#F9CDAD","#FC9D9A","#FE4365")) +
-  ylab("AUC within-person centered") +
-  xlab("AUC centered") +
-  guides(col = guide_colourbar(title = "% of Total Variation Explained by \nBetween Person Differences \nin Predictors (ICC Predictor)")) +
-  geom_hline(yintercept = 0.5)   + 
-annotate("text", x = 0.5, y = 0.9, label = "Linear relationship between overall AUC \nand within-person AUC",  hjust = 0) +
-  geom_curve(
-    aes(x = 0.63, y = 0.87, xend = 0.75, yend = 0.8), 
-    arrow = arrow(length = unit(0.08, "inch")), 
-    size = 0.3, 
-    color = "gray20", 
-    curvature = -0.15
-  ) +
-  ggtitle("Uncentered Predictors")
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(patchwork)
+
+final_results_df_2 = read.csv("final_results_df_2.csv")
+final_results_df_3 = read.csv("final_results_df_3.csv")
+final_results_df_4 = read.csv("final_results_df_4.csv")
+final_results_df_5 = read.csv("final_results_df_5.csv")
+
+plot_data = function(data_viz, spanpar){
+  # Reshape to long format
+  df_long <- data_viz %>%
+    pivot_longer(
+      cols = c(shuffle_cor,movingwindowshuffle_cor),
+       names_to = "type",
+      values_to = "Correlation"
+    )
   
-p2 <- ggplot(result, aes(x=auc, y=auc_individual, color = icc_pred)) +
-  geom_point(alpha=0.5, size = 1) +
-  #scale_size(range = c(.001, 6), name="") +
-  theme_minimal() +
-  scale_colour_gradientn(colours = c("#2A363B","#83AF9B","#C8C8A9","#F9CDAD","#FC9D9A","#FE4365")) +
-  ylab("AUC within-person") +
-  xlab("AUC") +
-  guides(col = guide_colourbar(title = "% of Total Variation Explained by \nBetween Person Differences \nin Predictors (ICC Predictor)")) +
-  geom_hline(yintercept = 0.5) + 
-annotate("text", x = 0.5, y = 0.9, label = "If between person differences explain a large % of variation in predictors and outcome,\nthe overall AUC becomes high while the within-person AUC remains low.",  hjust = 0) +
-  geom_curve(
-    aes(x = 0.75, y = 0.82, xend = 0.9, yend = 0.6), 
-    arrow = arrow(length = unit(0.08, "inch")), 
-    size = 0.3, 
-    color = "gray20", 
-    curvature = 0.35
-  ) +
-  ggtitle("Centered Predictors")
+  p = ggplot(df_long, aes(x = icc_data, y = Correlation, color = type)) +
+    geom_point(alpha = 0.8, size = 1) +
+    geom_smooth(se = FALSE, method = "loess", span = spanpar) +
+    theme_minimal() +
+    scale_color_manual(values = c(
+      "shuffle_cor" = "#40916C",
+      "movingwindowshuffle_cor" = "#4D8FAC"
+    ), labels = c("shuffle_cor" = "No true Relationship (Record-Wise)", 
+                  "movingwindowshuffle_cor" ="No true Relationship (Moving-Window)"
+    )) +
+    labs(color = "") +
+    ggtitle(paste0("N: ", max(data_viz$num_subjects),
+                   ", Timepoints: ", max(data_viz$num_samples),
+                   ",\nICC Predictors (mean): ", round(data_viz$icc_pred, 2))) +
+    ylab("Overall Correlation") +
+    xlab("ICC Outcome") +
+    ylim(0, 0.7)
+  
+  return(p)
+}
 
+spanpar = 0.4
 
-combined_plot <- (p2 / p1) +
+p2 = plot_data(final_results_df_2, spanpar)
+p3 = plot_data(final_results_df_3, spanpar)
+p4 = plot_data(final_results_df_4, spanpar)
+p5 = plot_data(final_results_df_5, spanpar)
+
+# Combine the plots and collect the legend
+final_plot2 <- (p2 + p3 + p4 + p5) +
+  plot_layout(ncol = 2, guides = "collect") & 
+  theme(legend.position = "bottom")
+
+# Add title and optional styling
+final_plot2 <- final_plot2 +
   plot_annotation(
-    title = "Relationship Overall AUC and within-person AUC (A = 0.05 and A = 0.2)",
-  ) 
-combined_plot
+    title = "Predictive Performance Shuffled Data Continuous Outcomes",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
+    )
+  )
 
-ggsave( "Figures/Figure6_Example3.jpg",
-  plot = combined_plot,
-  width = 11.5,
-  height = 6.5)
+print(final_plot2)
+ggsave("Figures/Figure6_NullModelContinious.jpg",
+  plot = final_plot2,
+  width = 7,
+  height = 6)
+
 ```
 
 
 ## Pitfall 2: Mismatch between chosen cross-validation strategy, employment, and actual observations 
 ```{r }
-############ Table 7 #############
+############ Figure 7 #############
 ##################################
 
+# Generating Outcome
+overall_prob_outcome <- 0.1  # Overall probability of 1 (for the entire dataset) (e.g., tracking depression 0.146)
+sd_outcome <- 0.2 # Controls variability BETWEEN different subject (nneds to be smaller than sqrt(overall_prob_outcome*(1-overall_prob_outcome)))
+
+# Generating Features
+A <- 0.05 # Relationship between features and outcome
+feature_std <- 0.1 # population level feature generating process
+B <- 0.8  # Cross-subject variability ("random effect") (added per participants for all timepoints)
+C <- 0.45 # Within-subject variability (added within participant for each timepoint)
+
+source("Simulation_Functions_notshiny.R")
+
+set.seed(12361488)
+features_sample <- create_data(n_features,90,150,A,feature_std,B,C,overall_prob_outcome,sd_outcome,0,0)
+
 # Merge the p-values with the original dataset for plotting
-data <- features_sample 
+data <- features_sample[[2]] 
 
 # Compute mean y for each subject and reorder factor levels in ascending order
 subject_stats <- data %>%
@@ -283,7 +644,7 @@ p2 <- ggplot(data, aes(x = time, y = y)) +
   labs(
     x = "Time", 
     y = "Outcome", 
-    title = paste("Within-person variability over time: \n88 participants (58.6%) do not experience within-person variability. ")
+    title = paste("Within-person variability over time: \n78 participants (52%) do not experience within-person variability. ")
   ) +
   scale_y_continuous(breaks = c(0, 1)) +  # Ensure only 0 and 1 appear on the y-axis
   theme_minimal() +
@@ -292,10 +653,10 @@ p2 <- ggplot(data, aes(x = time, y = y)) +
 
 p2
 
-ggsave( "Figures/Figure7_Example_var.jpg",
-  plot = p2,
-  width = 8,
-  height = 7)
+# ggsave( "Figures/Figure7_Example_var.jpg",
+#   plot = p2,
+#   width = 8,
+#   height = 7)
 
 ```
 
@@ -303,7 +664,7 @@ ggsave( "Figures/Figure7_Example_var.jpg",
 ## Pitfall 3: Weak benchmark and missing baseline comparison
 
 ```{r }
-############ Table 5 #############
+############ Table 7 #############
 ##################################
 sim_1$auc_value_base # row-wise
 sim_4$auc_value_base # rolling window
@@ -312,12 +673,12 @@ sim_4$auc_value_base # rolling window
 sim_4$auc_value
 
 
-test <- sim_1$ind_base[[1]] %>%
+test <- sim_4$ind_base[[1]] %>%
   group_by(subject) %>%
   filter(length(unique(true)) > 1) %>%
   filter(sum(true == 1) > 0, sum(true == 0) > 0) %>%
   summarise(
-    auc_val = auc(roc(as.numeric(as.character(true)), as.numeric(as.character(pred)), quiet = TRUE))[1],
+    auc_val = pROC::auc(pROC::roc(as.numeric(as.character(true)), as.numeric(as.character(pred)), quiet = TRUE))[1],
     .groups = "drop" # Ungroup after summarizing
   )
 
@@ -325,6 +686,159 @@ mean(test$auc_val)
 
 ```
 
+```{r}
+############# Figure 9 BINARY #################
+########################################
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(patchwork)
+
+final_results_df_2_b = read.csv("final_results_df_2_b.csv")
+final_results_df_3_b = read.csv("final_results_df_3_b.csv")
+final_results_df_4_b = read.csv("final_results_df_4_b.csv")
+final_results_df_5_b = read.csv("final_results_df_5_b.csv")
+
+plot_data = function(data_viz,spanpar){
+  # Reshape to long format
+  df_long <- data_viz %>%
+    pivot_longer(
+      cols = c(`real_AUC.random.intercept.only.`, `real_AUC.`,`movingwindow_AUC.`,`subjectwise_AUC.`,`movingwindow_AUC.random.intercept.only.`),
+      names_to = "AUC_type",
+      values_to = "AUC"
+    )
+  p = ggplot(df_long, aes(x = icc_data, y = AUC, color = AUC_type)) +
+    geom_point(alpha = 0.8, size = 1) +
+    geom_smooth(se = FALSE, method = "loess",span = spanpar) +
+    theme_minimal() +
+    scale_color_manual(values = c(
+      "real_AUC.random.intercept.only." ="#B5E48C" ,
+      "real_AUC." = "#74C69D",
+      "movingwindow_AUC." ="#9EC5E7",
+      "movingwindow_AUC.random.intercept.only." = "#A2D2FF",
+      "subjectwise_AUC." ="#FFB5A7"
+    ), 
+    labels = c(
+               "real_AUC.random.intercept.only."="Random Intercept only (Record-Wise)",
+               "real_AUC." ="Random Forest (Record-Wise) ",
+               "movingwindow_AUC." ="Random Forest (Moving-Window)",
+               "subjectwise_AUC." ="Random Forest (Subject-Wise)",
+               "movingwindow_AUC.random.intercept.only." = "Random Intercept only (Moving-Window)")) +
+    theme(legend.position = "none") +
+    geom_hline(yintercept = 0.5, color = "grey", size = 0.8) +
+    labs(color = "Model") +
+    ylim(0.4,0.95) +
+    ggtitle(paste0("N: ", max(data_viz$num_subjects),", ", "Timepoints: ", max(data_viz$num_samples),", ","\n",  "ICC Predictors (mean): ", round(data_viz$icc_pred,2))) +
+    ylab("Overall AUC") +
+    xlab("ICC Outcome")
+  return(p)
+}
+
+spanpar = 0.6
+
+p2 = plot_data(final_results_df_2_b, spanpar)
+p3 = plot_data(final_results_df_3_b, spanpar)
+p4 = plot_data(final_results_df_4_b, spanpar)
+p5 = plot_data(final_results_df_5_b, spanpar)
+
+# Combine all plots and collect legends at the bottom
+final_plot <- (p2 + p3 + p4 + p5) + 
+  plot_layout(ncol = 2, guides = "collect") & 
+  theme(legend.position = "right")
+
+# Add title and optional styling
+final_plot <- final_plot +
+  plot_annotation(
+    title = "Predictive Performance Baseline Comparison Binary Outcomes",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
+    )
+  )
+
+print(final_plot)
+ggsave("Figures/Figure9_BaselineBinary.jpg",
+  plot = final_plot,
+  width = 9,
+  height = 8)
+```
+
+```{r}
+############# Figure 10 Continiuous #################
+########################################
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(patchwork)
+
+final_results_df_2 = read.csv("final_results_df_2.csv")
+final_results_df_3 = read.csv("final_results_df_3.csv")
+final_results_df_4 = read.csv("final_results_df_4.csv")
+final_results_df_5 = read.csv("final_results_df_5.csv")
+
+plot_data = function(data_viz,spanpar){
+  # Reshape to long format
+  df_long <- data_viz %>%
+    pivot_longer(
+    #  cols = c(`shuffle_mae`, `real_mae_base`, `real_mae`,`centered_mae`,`subjectwise_mae`),
+      cols = c(`real_cor_base`, `real_cor`,`movingwindow_cor`,`subjectwise_cor`,movingwindow_cor_base),
+      names_to = "type",
+      values_to = "Correlation"
+    )
+  p = ggplot(df_long, aes(x = icc_data, y = Correlation, color = type)) +
+    geom_point(alpha = 0.8, size = 1) +
+    geom_smooth(se = FALSE, method = "loess",span = spanpar) +
+    theme_minimal() +
+    scale_color_manual(values = c(
+      "real_cor_base" ="#B5E48C" ,
+      "real_cor" = "#74C69D",
+      "movingwindow_cor" = "#9EC5E7",
+      "movingwindow_cor_base" = "#A2D2FF",
+      "subjectwise_cor" ="#FFB5A7"
+    ), labels = c("real_cor_base"="Random Intercept only (Record-Wise)",
+                  "real_cor" ="Random Forest (Record-Wise)",
+                  "movingwindow_cor" ="Random Forest (Moving-Window) ",
+                  "subjectwise_cor" = "Random Forest (Subject-Wise)",
+                  "movingwindow_cor_base" = "Random Intercept only (Moving-Window)"
+    )) +
+    theme(legend.position = "none") +
+    labs(color = "Model") +
+   # xlim(0.1,1) +
+    ggtitle(paste0("N: ", max(data_viz$num_subjects),", ", "Timepoints: ", max(data_viz$num_samples),", ","\n",  "ICC Predictors (mean): ", round(data_viz$icc_pred,2))) +
+    ylab("Overall Correlation") +
+    xlab("ICC Outcome") +
+    ylim(0, 1)
+  return(p)
+}
+
+
+spanpar = 0.4
+
+p2 = plot_data(final_results_df_2, spanpar)
+p3 = plot_data(final_results_df_3, spanpar)
+p4 = plot_data(final_results_df_4, spanpar)
+p5 = plot_data(final_results_df_5, spanpar)
+
+# Combine all plots and collect legends at the bottom
+final_plot <- (p2 + p3 + p4 + p5) + 
+  plot_layout(ncol = 2, guides = "collect") & 
+  theme(legend.position = "right")
+
+# Add title and optional styling
+final_plot <- final_plot +
+  plot_annotation(
+    title = "Predictive Performance Baseline Comparison Continuous Outcomes",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
+    )
+  )
+
+print(final_plot)
+ggsave("Figures/Figure10_BaselineContinious.jpg",
+  plot = final_plot,
+  width = 9,
+  height = 8)
+
+```
 
 ```{r }
 ############ Figure 8 #############
@@ -332,10 +846,10 @@ mean(test$auc_val)
 
 result = read.csv("simulation_results_baseline.csv")
 p7 <- ggplot(result, aes(x=icc, y=auc_value_base)) +
-  geom_point(alpha=0.5, size = 1.2, color = "#83AF9B") +
+  geom_point(alpha=0.5, size = 1.2, color = "#40916C") +
   #scale_size(range = c(.001, 6), name="") +
   theme_minimal() +
-  scale_colour_gradientn(colours = c("#83AF9B")) +
+  scale_colour_gradientn(colours = c("#40916C")) +
   ylab("Overall Performance (AUC)") +
   xlab("% of Total Variation Explained by Between Person Differences in the Outcome (ICC Outcome)") +
   guides(col = guide_colourbar()) +
@@ -347,7 +861,7 @@ p7 <- ggplot(result, aes(x=icc, y=auc_value_base)) +
     aes(x = 0.7, y = 0.85, xend = 0.5, yend = 0.91), 
     arrow = arrow(length = unit(0.08, "inch")), 
     size = 0.3, 
-    color = "gray20", 
+    color = "#1B4332", 
     curvature = 0.2
   ) +
       annotate("text", x = 0.2, y = 0.62, label =  "Performance can be moderate even if between person differences explain only a relatively \nsmall % of total variation in the outcome",  hjust = 0) +
@@ -355,7 +869,7 @@ p7 <- ggplot(result, aes(x=icc, y=auc_value_base)) +
     aes(x = 0.19, y = 0.62, xend = 0.07, yend = 0.61), 
     arrow = arrow(length = unit(0.08, "inch")), 
     size = 0.3, 
-    color = "gray20", 
+    color = "#1B4332", 
     curvature = 0.2
   ) 
 
