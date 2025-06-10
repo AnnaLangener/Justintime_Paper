@@ -24,23 +24,23 @@ Empirical Example: (Qwantify App dataset (esm_clean.csv from <https://osf.io/sxf
 
 -   **EmpiricalExample_continious.R**: Was used to prepare the results for the empirical regression example.
 
--   **Simulation_continious.R:** Contains the functions to run different cross-validation splits and to shuffle the data for continious outcomes (used in EmpiricalExample_continious.R)
+-   **Simulation_continous.R:** Contains the functions to run different cross-validation splits and to shuffle the data for continious outcomes (used in EmpiricalExample_continious.R)
 
-    -   final_results_df_5_b.csv: Binary Example, "complete" (N = 241, T = 50)
+    -   final_results_df_5_b.csv: Results Binary Example, "complete" (N = 241, T = 50)
 
-    -   final_results_df_4_b.csv: Binary Example, N = 100, T = 60
+    -   final_results_df_4_b.csv: Results Binary Example, N = 100, T = 60
 
-    -   final_results_df_3_b.csv: Binary Example, N = 30, T = 100
+    -   final_results_df_3_b.csv: Results Binary Example, N = 30, T = 100
 
-    -   final_results_df_2_b.csv: Binary Example, N = 20, T = 150
+    -   final_results_df_2_b.csv: Results Binary Example, N = 20, T = 150
 
-    -   final_results_df_5.csv: Regression Example, "complete" (N = 241, T = 50)
+    -   final_results_df_5.csv: Results Regression Example, "complete" (N = 241, T = 50)
 
-    -   final_results_df_4.csv: Regression Example, N = 100, T = 60
+    -   final_results_df_4.csv: Results Regression Example, N = 100, T = 60
 
-    -   final_results_df_3.csv: Regression Example, N = 30, T = 100
+    -   final_results_df_3.csv: Results Regression Example, N = 30, T = 100
 
-    -   final_results_df_2.csv: Regression Example, N = 20, T = 150
+    -   final_results_df_2.csv: Results Regression Example, N = 20, T = 150
 
 Figures:
 

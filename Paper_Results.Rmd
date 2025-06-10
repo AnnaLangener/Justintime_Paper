@@ -20,78 +20,6 @@ This R Markdown file can be used to replicate our results that are presented in 
 
 
 ## Pitfall 1: Within person performance Emprircal Example
-```{r }
-### Descriptives
-
-# Read the CSV files
-final_results_df_2_b <- read.csv("final_results_df_2_b.csv")
-final_results_df_3_b <- read.csv("final_results_df_3_b.csv")
-final_results_df_4_b <- read.csv("final_results_df_4_b.csv")
-final_results_df_5_b <- read.csv("final_results_df_5_b.csv")
-
-# Select specific columns
-cols_to_select1 <- c("outcome", "overall_prob_outcome", "sd_outcome",
-                  "icc_data")
-cols_to_select <- c("overall_prob_outcome", "sd_outcome",
-                   "icc_data")
-
-df2_selected <- final_results_df_2_b[, cols_to_select1]
-df3_selected <- final_results_df_3_b[, cols_to_select]
-df4_selected <- final_results_df_4_b[, cols_to_select]
-df5_selected <- final_results_df_5_b[, cols_to_select]
-
-# Rename columns to distinguish between dataframes (optional but recommended)
-names(df2_selected) <- paste0(names(df2_selected), "_df2")
-names(df3_selected) <- paste0(names(df3_selected), "_df3")
-names(df4_selected) <- paste0(names(df4_selected), "_df4")
-names(df5_selected) <- paste0(names(df5_selected), "_df5")
-
-# Combine the selected dataframes column-wise
-combined_df <- cbind(df2_selected, df3_selected, df4_selected, df5_selected)
-
-# View or write the combined data frame
-head(combined_df)
-
-combined_df <- combined_df %>%
-  mutate(across(where(is.numeric), ~ round(.x, 2)))
-write.csv(combined_df, "combined_des_binary.csv", row.names = FALSE)
-
-
-
-# Read the CSV files
-final_results_df_2 <- read.csv("final_results_df_2.csv")
-final_results_df_3 <- read.csv("final_results_df_3.csv")
-final_results_df_4 <- read.csv("final_results_df_4.csv")
-final_results_df_5 <- read.csv("final_results_df_5.csv")
-
-# Select specific columns
-cols_to_select1 <- c("outcome", "overall_prob_outcome", "sd_outcome",
-                  "icc_data")
-cols_to_select <- c("overall_prob_outcome", "sd_outcome",
-                   "icc_data")
-
-df2_selected <- final_results_df_2[, cols_to_select1]
-df3_selected <- final_results_df_3[, cols_to_select]
-df4_selected <- final_results_df_4[, cols_to_select]
-df5_selected <- final_results_df_5[, cols_to_select]
-
-# Rename columns to distinguish between dataframes (optional but recommended)
-names(df2_selected) <- paste0(names(df2_selected), "_df2")
-names(df3_selected) <- paste0(names(df3_selected), "_df3")
-names(df4_selected) <- paste0(names(df4_selected), "_df4")
-names(df5_selected) <- paste0(names(df5_selected), "_df5")
-
-# Combine the selected dataframes column-wise
-combined_df <- cbind(df2_selected, df3_selected, df4_selected, df5_selected)
-
-# View or write the combined data frame
-head(combined_df)
-
-combined_df <- combined_df %>%
-  mutate(across(where(is.numeric), ~ round(.x, 2)))
-write.csv(combined_df, "combined_des_continious.csv", row.names = FALSE)
-
-```
 
 ```{r }
 ############ Table 4 #############
@@ -162,11 +90,11 @@ time_variable = "day"
 
 colnames(data)[colnames(data) == "user_id"] <- "subject"
 colnames(data)[colnames(data) == "day"]     <- "time"
-#colnames(data)[colnames(data) == "wantedToFeel_goodAboutMe"]  <- "y"
+#colnames(data)[colnames(data) == "wantedToFeel_goodAboutMe"]  <- "y" 
 
 data <- data %>%
   group_by(subject) %>%
-  mutate(y = lag(wantedToFeel_goodAboutMe, n = 1))
+  mutate(y = lag(wantedToFeel_goodAboutMe, n = 1)) # Lag outcome
 
 data <- data[!is.na(data$y),]
 
@@ -206,7 +134,7 @@ table <- rbind(r_1$overall_summary,r_3$overall_summary, r_4$overall_summary)
 table$'AUC Overall' <- c(r_1$auc_value,r_3$auc_value,r_4$auc_value)
 colnames(table) <-  c("Mean AUC within-person:", "SD AUC within-person:", "% of AUC > 0.5 within-person:", "N included within-person:", "AUC Overall")
 rownames(table) <- c("row-wise","subject-wise","rolling-window")
-table
+round(table,2)
 ```
 
 
@@ -290,107 +218,6 @@ table <- rbind(
 table <- round(table[,c(5,1,2,3,4)], 2)
 table
 ```
-
-
-
-
-```{r }
-## Try out
-
-# Basic Parameters from Study
-n_features <- 10  # Features
-n_samples <- 200  # Timepoints
-n_subjects <- 15 # Subjects
-
-# Generating Outcome
-overall_prob_outcome <- 0.4  # Overall probability of 1 (for the entire dataset) (e.g., tracking depression 0.146)
-sd_outcome <- 0.3 # Controls variability BETWEEN different subject (nneds to be smaller than sqrt(overall_prob_outcome*(1-overall_prob_outcome)))
-
-# Generating Features
-A <- 0.02 # Relationship between features and outcome
-feature_std <- 0.1 # population level feature generating process
-B <- 0.8  # Cross-subject variability ("random effect") (added per participants for all timepoints)
-C <- 0.2 # Within-subject variability (added within participant for each timepoint)
-
-source("Simulation_Functions_notshiny.R")
-
-set.seed(12361488)
-features_sample <- create_data(n_features, n_samples, n_subjects, A, feature_std, B, C, overall_prob_outcome, sd_outcome, 0,0)
-
-features_sample <- features_sample[[1]]
-
-sim_1 <- run_simulation(features_sample,"row-wise",1, testsize = 0.3)
-
-table <- rbind(sim_1$overall_summary)
-table$'AUC Overall' <- c(sim_1$auc_value)
-
-table
-
-library(dplyr)
-library(ggplot2)
-
-pred_true = as.data.frame(sim_1$ind)
-
-
-
-pred_true <- pred_true %>%
-  arrange(subject, true) %>%
-  group_by(subject) %>%
-  mutate(day = row_number())
-
-
-library(pROC)
-library(dplyr)
-
-# Compute individual AUC
-ind_auc <- pred_true %>%
-  group_by(subject) %>%
-  filter(length(unique(true)) > 1) %>%
-  filter(sum(true == 1) > 0, sum(true == 0) > 0) %>%
-  summarise(
-    auc_val = pROC::auc(pROC::roc(response = true, predictor = pred, direction = "<",positive = "1", levels = c(0,1)))[1],
-    .groups = "drop"
-  )
-
-# Merge AUCs back into pred_true
-pred_true <- left_join(pred_true, ind_auc, by = "subject")
-pred_true$auc_val = round(pred_true$auc_val,2)
-pred_true$auc_val[is.na(pred_true$auc_val)] = "-"
-
-pred_true$pred  = ifelse(pred_true$pred  > 0.5, 1, 0)
-
-
-
-# Add prediction correctness column
-pred_true <- pred_true %>%
-  mutate(prediction_correct = ifelse(true == pred, "Correct", "Incorrect")) # CHECK AGAIN IF PREDICTION IS 0/1 !!!
-
-
-plot = ggplot(pred_true, aes(day, subject, color = factor(true), shape = prediction_correct)) + 
-  geom_point(size = 2, alpha = 0.8) +
-  geom_text(aes(label = ifelse(!duplicated(subject), paste("AUC: ", auc_val), "")),
-            x = -Inf, hjust = 0, size = 3, color = "gray40") +  # AUC on the left side
-  scale_color_manual(values = c("0" = "#FFB5A7", "1" = "#40916C")) +
-  scale_shape_manual(values = c("Correct" = 15, "Incorrect" = 0)) +
-  labs(color = NULL, shape = NULL) +  # Removes legend titles
-  theme_minimal() +
-  theme(
-    panel.grid = element_blank(),
-    legend.position = "bottom",
-    axis.text.y = element_blank(),
-    axis.text.x = element_blank()     # Removes x-axis tick labels
-  ) +
-  xlim(-6, 75) +
-  labs(y = paste0("Within-Person"), x = "") +
-  ggtitle(paste("AUC evaluated over the whole dataset:", round(table$'AUC Overall', 2), "(Between-Person)")) +
-  theme(text = element_text('Futura'),axis.title=element_text(size=14)) 
-plot
-ggsave("WithinBetween_Example.png", 
-       width = 6100, height = 3000, units = "px", dpi = 800,plot = plot)
-
-
-```
-
 
 
 ```{r}
@@ -881,3 +708,104 @@ ggsave(  "Figures/Figure8.jpg",
 ```
 
 
+Other things that were not presented in the paper (but used for a presentation):
+
+
+
+
+```{r }
+## Try out
+
+# Basic Parameters from Study
+n_features <- 10  # Features
+n_samples <- 200  # Timepoints
+n_subjects <- 15 # Subjects
+
+# Generating Outcome
+overall_prob_outcome <- 0.4  # Overall probability of 1 (for the entire dataset) (e.g., tracking depression 0.146)
+sd_outcome <- 0.3 # Controls variability BETWEEN different subject (nneds to be smaller than sqrt(overall_prob_outcome*(1-overall_prob_outcome)))
+
+# Generating Features
+A <- 0.02 # Relationship between features and outcome
+feature_std <- 0.1 # population level feature generating process
+B <- 0.8  # Cross-subject variability ("random effect") (added per participants for all timepoints)
+C <- 0.2 # Within-subject variability (added within participant for each timepoint)
+
+source("Simulation_Functions_notshiny.R")
+
+set.seed(12361488)
+features_sample <- create_data(n_features, n_samples, n_subjects, A, feature_std, B, C, overall_prob_outcome, sd_outcome, 0,0)
+
+features_sample <- features_sample[[1]]
+
+sim_1 <- run_simulation(features_sample,"row-wise",1, testsize = 0.3)
+
+table <- rbind(sim_1$overall_summary)
+table$'AUC Overall' <- c(sim_1$auc_value)
+
+table
+
+library(dplyr)
+library(ggplot2)
+
+pred_true = as.data.frame(sim_1$ind)
+
+
+
+pred_true <- pred_true %>%
+  arrange(subject, true) %>%
+  group_by(subject) %>%
+  mutate(day = row_number())
+
+
+library(pROC)
+library(dplyr)
+
+# Compute individual AUC
+ind_auc <- pred_true %>%
+  group_by(subject) %>%
+  filter(length(unique(true)) > 1) %>%
+  filter(sum(true == 1) > 0, sum(true == 0) > 0) %>%
+  summarise(
+    auc_val = pROC::auc(pROC::roc(response = true, predictor = pred, direction = "<",positive = "1", levels = c(0,1)))[1],
+    .groups = "drop"
+  )
+
+# Merge AUCs back into pred_true
+pred_true <- left_join(pred_true, ind_auc, by = "subject")
+pred_true$auc_val = round(pred_true$auc_val,2)
+pred_true$auc_val[is.na(pred_true$auc_val)] = "-"
+
+pred_true$pred  = ifelse(pred_true$pred  > 0.5, 1, 0)
+
+
+
+# Add prediction correctness column
+pred_true <- pred_true %>%
+  mutate(prediction_correct = ifelse(true == pred, "Correct", "Incorrect")) # CHECK AGAIN IF PREDICTION IS 0/1 !!!
+
+
+plot = ggplot(pred_true, aes(day, subject, color = factor(true), shape = prediction_correct)) + 
+  geom_point(size = 2, alpha = 0.8) +
+  geom_text(aes(label = ifelse(!duplicated(subject), paste("AUC: ", auc_val), "")),
+            x = -Inf, hjust = 0, size = 3, color = "gray40") +  # AUC on the left side
+  scale_color_manual(values = c("0" = "#FFB5A7", "1" = "#40916C")) +
+  scale_shape_manual(values = c("Correct" = 15, "Incorrect" = 0)) +
+  labs(color = NULL, shape = NULL) +  # Removes legend titles
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "bottom",
+    axis.text.y = element_blank(),
+    axis.text.x = element_blank()     # Removes x-axis tick labels
+  ) +
+  xlim(-6, 75) +
+  labs(y = paste0("Within-Person"), x = "") +
+  ggtitle(paste("AUC evaluated over the whole dataset:", round(table$'AUC Overall', 2), "(Between-Person)")) +
+  theme(text = element_text('Futura'),axis.title=element_text(size=14)) 
+plot
+# ggsave("WithinBetween_Example.png", 
+#        width = 6100, height = 3000, units = "px", dpi = 800,plot = plot)
+
+
+```

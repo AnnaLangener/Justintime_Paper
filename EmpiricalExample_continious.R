@@ -1,81 +1,16 @@
+library(dplyr)
+library(lme4)
+library(tibble)
+library(dplyr)
+library(pROC)
+library(tidyr)
+library(ggplot2)
+library(purrr)
+library(randomForest)
 
-download.OSF.file <- function(GUID,Access_Token=NULL,file_name)
-{
-  require(httr)
-  require(rjson)
-  #search for file private/public status
-  GETurl <- paste0("https://api.osf.io/v2/files/",GUID)
-  req <- GET(GETurl, write_disk("test",overwrite=T))
-  json_data <- fromJSON(file = "test")
-  if (length(json_data$data) > 0){
-    req1 <- GET(json_data$data$links$download,
-                write_disk(file_name, overwrite = TRUE))
-    print(paste0("The file has been downloaded to your working directory as: ",
-                 file_name))
-  }
-  else if (length(Access_Token) == 1){
-    if (grepl("https://osf.io",Access_Token)==TRUE){
-      req1 <- GET(paste0("https://api.osf.io/v2/files/",GUID,"/",gsub(".*/","",Access_Token)),
-                  write_disk("test", overwrite = TRUE))
-      json_data <- fromJSON(file = "test")
-      if (length(json_data$data) > 0){
-        req1 <- GET(json_data$data$links$download,
-                    write_disk(file_name, overwrite = TRUE))
-        print(paste0("The file has been downloaded to your working directory as: ",
-                     file_name))
-      }
-      else{
-        print(json_data$errors[[1]]$detail[1])
-      }
-    }
-    else if (grepl("https://osf.io",Access_Token)==FALSE){
-      req1 <- GET(paste0("https://api.osf.io/v2/files/",GUID),
-                  write_disk("test", overwrite = TRUE),
-                  add_headers("Authorization" = paste0("Bearer ",Access_Token)))
-      json_data <- fromJSON(file = "test")
-      if (length(json_data$data) > 0){
-        req1 <- GET(json_data$data$links$download,
-                    write_disk(file_name, overwrite = TRUE),
-                    add_headers("Authorization" = paste0("Bearer ",Access_Token)))
-        print(paste0("The file has been downloaded to your working directory as: ",
-                     file_name))
-      }
-      else{
-        print(json_data$errors[[1]]$detail[1])
-      }
-    }
-    else{
-      print(json_data$errors[[1]]$detail[1])
-    }
-  }
-  else{
-    print(json_data$errors[[1]]$detail[1])
-  }
-}
-download.OSF.file(GUID="grm4t",file_name="Clinical EMA data.xlsx")
-
-
-
-data = data  %>% group_by %>%
-  group_by(user_id) %>%
-  mutate(day = row_number())
-
-data <- data %>%
-  group_by(user_id) %>%
-  filter(n_distinct(day) >= days_inlcuded) %>%
-  ungroup()
-data = data[data$day <= days_inlcuded,]
-
-sampled_ids <- sample(unique(data$user_id), size = participants_included, replace = FALSE)
-
-
-
-
-data[data == 999] <- NA
 ############### Run Empirical Example #########
 ###############################################
 
-data_all = read.csv("esm_clean.csv")
 run_simulation_example <- function(data_all = data, days_inlcuded = 50,participants_included = 30, icc_treshhold = 0, direction = ">"){
 
   data_all = data_all  %>% group_by %>%
@@ -135,14 +70,11 @@ run_simulation_example <- function(data_all = data, days_inlcuded = 50,participa
     }
     
     print(paste("ICC predictors mean:",mean(icc_data_var$icc)))
-    
-    
-   
-    # 
-    # data <- data %>%
-    #   group_by(ID) %>%
-    #   filter(n_distinct(Day) >= 3) %>%
-    #   ungroup()
+
+    data <- data %>%
+      group_by(ID) %>%
+      filter(n_distinct(Day) >= 3) %>%
+      ungroup()
     
     ## --- Summary statistics ---
     overall_prob_outcome <- mean(data[[outcome_variable]], na.rm = TRUE)
@@ -287,8 +219,6 @@ library(tidyr)
 library(patchwork)
 
 
-
-#final_results_df_1 = run_simulation_example(read.csv("esm_clean.csv"),200,10,0, ">") # most extreme example
 final_results_df_2 = run_simulation_example(read.csv("esm_clean.csv"),150,20,0, ">") # 
 final_results_df_3 = run_simulation_example(read.csv("esm_clean.csv"), 100,30,0, ">")
 final_results_df_4 = run_simulation_example(read.csv("esm_clean.csv"),60,100,0, ">") # ...
@@ -299,6 +229,16 @@ write.csv(final_results_df_2,"final_results_df_2.csv")
 write.csv(final_results_df_3,"final_results_df_3.csv")
 write.csv(final_results_df_4,"final_results_df_4.csv")
 write.csv(final_results_df_5,"final_results_df_5.csv")
+
+
+
+
+
+########### Other code to look at the results that was not directly used in the paper ###########
+########### In the paper we presented separate plots, see Paper_Results.Rmd #####################
+
+
+###### Quick overview of results #######
 
 plot_data = function(data_viz,spanpar){
   # Reshape to long format
@@ -367,7 +307,6 @@ plot_data = function(data_viz,spanpar){
 
 
 spanpar = 0.3
-#p1 = plot_data(final_results_df_1, spanpar)
 p2 = plot_data(final_results_df_2, spanpar)
 p3 = plot_data(final_results_df_3, spanpar)
 p4 = plot_data(final_results_df_4, spanpar)

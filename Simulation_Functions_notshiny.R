@@ -12,6 +12,7 @@ estBetaParams <- function(mu, var) {
 
 
 #### Dependencies over time ####
+# Not used in this paper but could be added as a future adaptation
 # The functions to create dependencies over time are adapted from 
 # Bringmann et al., "Changing dynamics: TV-AR models using generalized additive modeling"
 
@@ -25,25 +26,6 @@ sine<-function(n_samples,time_effect,participant_mean, timevariability){ # TempD
   
   return(genfun)
 } 
-
-# ## AR 1 (still needs to be adapted)
-# 
-# AR1<-function(n_samples,beta_0,beta_1,sd_innovation, prob_ind){
-#   y<-rep(NA,n_samples) 
-# 
-#   y[1]<-rbinom(n_samples, size = 1, prob = prob_ind)
-# 
-#   for (t in 2:NT){ #In this for-loop the time points 2 to NT are created.
-#     #beta_0 is the intercept, beta_1 the autoregressive coefficient.
-#     #rnorm(1,mean=0,sd=sd_innovation) is the innovation or error drawn from a normal distribution with mean zero and standard deviation (sd)
-#     #sd_innovation (standard deviation of the innovation; 1 in this case, thus variance and sd are the same here).
-#     y[t]<-exp(beta_0*prob_ind+beta_1*y[t-1]+rnorm(1,mean=0,sd=sd_innovation)
-#     
-#     
-#   }
-# 
-#   return(y)
-# }
 
 
 
