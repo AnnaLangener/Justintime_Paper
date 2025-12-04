@@ -14,6 +14,7 @@ library(lme4)
 library(caret)
 library(pROC)
 library(patchwork)
+library(CorBin)
 ```
 ## General Information
 This R Markdown file can be used to replicate our results that are presented in the paper. Please note that it does not contain the shiny app.
@@ -35,15 +36,18 @@ overall_prob_outcome <- 0.1  # Overall probability of 1 (for the entire dataset)
 sd_outcome <- 0.25 # Controls variability BETWEEN different subject (nneds to be smaller than sqrt(overall_prob_outcome*(1-overall_prob_outcome)))
 
 # Generating Features
-A <- 0.05 # Relationship between features and outcome
+A <- 0.05#1 # Relationship between features and outcome
 feature_std <- 0.1 # population level feature generating process
 B <- 0.8  # Cross-subject variability ("random effect") (added per participants for all timepoints)
 C <- 0.45 # Within-subject variability (added within participant for each timepoint)
 
 source("Simulation_Functions_notshiny.R")
+time_type = "None" #DCP, 1-dependent
+time_effect = 0
 
 set.seed(12361488)
-features_sample <- create_data(n_features,n_samples,n_subjects,A,feature_std,B,C,overall_prob_outcome,sd_outcome,0,0)
+features_sample <-create_data(n_features, n_samples, n_subjects, A, feature_std, B, C, overall_prob_outcome, sd_outcome, time_effect, time_type)
+#features_sample <- create_data(n_features,n_samples,n_subjects,A,feature_std,B,C,overall_prob_outcome,sd_outcome,0,0)
 features_sample <- features_sample[[1]]
 
 sim_1 <- run_simulation(features_sample,"row-wise",1, testsize = 0.3)
@@ -57,6 +61,115 @@ colnames(table) <-  c("Mean AUC within-person:", "SD AUC within-person:", "% of 
 rownames(table) <- c("row-wise","subject-wise","rolling-window")
 table <- round(table[,c(5,1,2,3,4)], 2)
 table
+
+
+sub_id <- unique(features_sample$subject)
+
+auc_value_ind  <- numeric(length(sub_id))
+auc_value_base <- numeric(length(sub_id))
+sub_number     <- sub_id  # initialize
+
+for (k in seq_along(sub_id)) {
+
+  idx <- features_sample$subject == sub_id[k]
+  y_k <- features_sample$y[idx]
+
+  # Only proceed if conditions are met
+  if (sum(y_k) > 0 && length(unique(y_k)) > 1) {
+    message("Processing subject ", k, " (ID: ", sub_id[k], ")")
+
+    tryCatch(
+      {
+        res <- run_simulation_slidingwindow(
+          features_sample[idx, ],
+          1,
+          windowsize = 14
+        )
+
+        auc_value_ind[k]  <- res$auc_value
+        auc_value_base[k] <- res$auc_value_base
+      },
+      error = function(e) {
+        warning("Simulation failed for subject ", sub_id[k], ": ", e$message)
+        auc_value_ind[k]  <- NA
+        auc_value_base[k] <- NA
+      }
+    )
+  } else {
+    auc_value_ind[k]  <- NA
+    auc_value_base[k] <- NA
+  }
+}
+
+
+mean(auc_value_ind, na.rm = TRUE)
+
+sum(!is.na(auc_value_ind))
+
+sum(auc_value_ind[!is.na(auc_value_ind)] != 0)
+
+# Table A.1.1
+
+time_type = "1-dependent" 
+time_effect = 0.25
+
+set.seed(12361488)
+rm(features_sample)
+features_sample <-create_data(n_features, n_samples, n_subjects, A, feature_std, B, C, overall_prob_outcome, sd_outcome, time_effect, time_type)
+features_sample <- features_sample[[1]]
+
+sim_1 <- run_simulation(features_sample,"row-wise",1, testsize = 0.3)
+sim_2 <- run_simulation_centering(features_sample,"row-wise",1,testsize = 0.3)
+sim_3 <- run_simulation(features_sample,"subject-wise",1, testsize = 0.3)
+sim_4 <- run_simulation_slidingwindow(features_sample,1,windowsize = 14)
+
+table <- rbind(sim_1$overall_summary,sim_3$overall_summary, sim_4$overall_summary)
+table$'AUC Overall' <- c(sim_1$auc_value,sim_3$auc_value,sim_4$auc_value)
+colnames(table) <-  c("Mean AUC within-person:", "SD AUC within-person:", "% of AUC > 0.5 within-person:", "N included within-person:", "AUC Overall")
+rownames(table) <- c("row-wise","subject-wise","rolling-window")
+table <- round(table[,c(5,1,2,3,4)], 2)
+table
+
+
+#Table A.1.2
+time_type = "DCP"
+time_effect =  seq(0.9, 0.01, length.out = (n_samples-1)) #0.2
+
+set.seed(12361488)
+rm(features_sample)
+features_sample <-create_data(n_features, n_samples, n_subjects, A, feature_std, B, C, overall_prob_outcome, sd_outcome, time_effect, time_type)
+features_sample <- features_sample[[1]]
+
+sim_1 <- run_simulation(features_sample,"row-wise",1, testsize = 0.3)
+sim_2 <- run_simulation_centering(features_sample,"row-wise",1,testsize = 0.3)
+sim_3 <- run_simulation(features_sample,"subject-wise",1, testsize = 0.3)
+sim_4 <- run_simulation_slidingwindow(features_sample,1,windowsize = 14)
+
+table <- rbind(sim_1$overall_summary,sim_3$overall_summary, sim_4$overall_summary)
+table$'AUC Overall' <- c(sim_1$auc_value,sim_3$auc_value,sim_4$auc_value)
+colnames(table) <-  c("Mean AUC within-person:", "SD AUC within-person:", "% of AUC > 0.5 within-person:", "N included within-person:", "AUC Overall")
+rownames(table) <- c("row-wise","subject-wise","rolling-window")
+table <- round(table[,c(5,1,2,3,4)], 2)
+table
+
+
+# Table A.1.3
+set.seed(12361488)
+features_sample <-create_data(n_features, n_samples, n_subjects, A, feature_std = 2, B, C, overall_prob_outcome, sd_outcome, 0, "None")
+features_sample <- features_sample[[1]]
+
+sim_1 <- run_simulation(features_sample,"row-wise",1, testsize = 0.3)
+sim_2 <- run_simulation_centering(features_sample,"row-wise",1,testsize = 0.3)
+sim_3 <- run_simulation(features_sample,"subject-wise",1, testsize = 0.3)
+sim_4 <- run_simulation_slidingwindow(features_sample,1,windowsize = 14)
+
+table <- rbind(sim_1$overall_summary,sim_3$overall_summary, sim_4$overall_summary)
+table$'AUC Overall' <- c(sim_1$auc_value,sim_3$auc_value,sim_4$auc_value)
+colnames(table) <-  c("Mean AUC within-person:", "SD AUC within-person:", "% of AUC > 0.5 within-person:", "N included within-person:", "AUC Overall")
+rownames(table) <- c("row-wise","subject-wise","rolling-window")
+table <- round(table[,c(5,1,2,3,4)], 2)
+table
+
 ```
 
 ```{r }
@@ -225,15 +338,17 @@ table
 ########################################
 
 result <- read.csv("simulation_results_0.csv") # see Run_Simulation.R to investigate how results were created
+title = "Bias in Performance Estimates (AUC) When No Relationship Exists: Expected AUC = 0.5"
 
-p1 <- ggplot(result[result$A == 0,], aes(x=icc, y=auc, color = icc_pred)) + # color: icc_pred
+
+p1 <- ggplot(result, aes(x=icc, y=auc, color = icc_pred)) + # color: icc_pred
   geom_point(alpha=0.4, size = 0.8) +
   theme_minimal() +
   scale_colour_gradientn(colours = c("#1B4332", "#40916C", "#74C69D", "#B5E48C", "#FDE68A", "#FFB5A7")) +
   ylab("Prediction Performance (Overall AUC)") +
   xlab("% of Total Variation Explained by Between Person Differences in the Outcome \n(ICC Outcome)") +
   guides(col = guide_colourbar(title = "% of Total Variation Explained by \nBetween Person Differences \nin Predictors (ICC Predictor)")) +
-  ggtitle("Bias in Performance Estimates (AUC) When No Relationship Exists: Expected AUC = 0.5") +
+  ggtitle(title) +
   annotate("text", x = 0.07, y = 0.82, label =  "Greater bias when between person differences explain a \nlarger % of total variation in both outcome and predictors.",  hjust = 0) +
   geom_curve(
     aes(x = 0.2, y = 0.86, xend = 0.35, yend = 0.93), 
@@ -250,11 +365,11 @@ p1 <- ggplot(result[result$A == 0,], aes(x=icc, y=auc, color = icc_pred)) + # co
     color = "gray20", 
     curvature = 0.1
   ) 
-  # Adding a diagonal line to illustrate the linear relationship
-ggsave("Figures/Figure4_Example2.jpg",
-  plot = p1,
-  width = 10.2,
-  height = 4.5)
+#   # Adding a diagonal line to illustrate the linear relationship
+# ggsave("Figures/Figure4_Example2.jpg",
+#   plot = p1,
+#   width = 10.2,
+#   height = 4.5)
 
 p1
 
@@ -263,6 +378,38 @@ sd(result$auc_individual[result$A == 0])
 mean(result$auc_c[result$A == 0])
 sd(result$auc_c[result$A == 0])
 sd(result$auc_individual[result$A == 0])
+
+
+
+result <- read.csv("simulation_results_time_A11.csv") # autoregressive effect in predictors
+title = "Robustness Check 1: Bias in Performance Estimates (AUC) When No Relationship Exists: Expected AUC = 0.5"
+
+result <- read.csv("simulation_results_time_A12.csv") # autoregressive effect in predictors
+title = "Robustness Check 2: Bias in Performance Estimates (AUC) When No Relationship Exists: Expected AUC = 0.5"
+
+result <- read.csv("simulation_results_time_A13.csv") # autoregressive effect in predictors
+result <- result[result$feature_std ==2,]
+
+title = "Robustness Check 3: Bias in Performance Estimates (AUC) When No Relationship Exists: Expected AUC = 0.5"
+
+
+p1 <- ggplot(result, aes(x=icc, y=auc, color = icc_pred)) + # color: icc_pred
+  geom_point(alpha=0.4, size = 0.8) +
+  theme_minimal() +
+  scale_colour_gradientn(colours = c("#1B4332", "#40916C", "#74C69D", "#B5E48C", "#FDE68A", "#FFB5A7")) +
+  ylab("Prediction Performance (Overall AUC)") +
+  xlab("% of Total Variation Explained by Between Person Differences in the Outcome \n(ICC Outcome)") +
+  guides(col = guide_colourbar(title = "% of Total Variation Explained by \nBetween Person Differences \nin Predictors (ICC Predictor)")) +
+  ggtitle(title) 
+
+  
+  # Adding a diagonal line to illustrate the linear relationship
+ggsave("Figures/Figure_A13.jpg",
+  plot = p1,
+  width = 10.2,
+  height = 4.5)
+
+p1
 
 ```
 
@@ -294,8 +441,8 @@ plot_data = function(data_viz, spanpar){
     theme_minimal() +
     scale_color_manual(
       values = c(
-        "shuffle_AUC." = "#40916C",
-        "movingwindowshuffle_AUC." = "#4D8FAC"
+        "shuffle_AUC." = "#c7835a",
+        "movingwindowshuffle_AUC." = "#58538f"
       ), 
       labels = c(
         "shuffle_AUC." = "No true Relationship (Record-Wise)",
@@ -369,8 +516,8 @@ plot_data = function(data_viz, spanpar){
     geom_smooth(se = FALSE, method = "loess", span = spanpar) +
     theme_minimal() +
     scale_color_manual(values = c(
-      "shuffle_cor" = "#40916C",
-      "movingwindowshuffle_cor" = "#4D8FAC"
+      "shuffle_cor" = "#c7835a",
+      "movingwindowshuffle_cor" = "#58538f"
     ), labels = c("shuffle_cor" = "No true Relationship (Record-Wise)", 
                   "movingwindowshuffle_cor" ="No true Relationship (Moving-Window)"
     )) +
@@ -380,7 +527,7 @@ plot_data = function(data_viz, spanpar){
                    ",\nICC Predictors (mean): ", round(data_viz$icc_pred, 2))) +
     ylab("Overall Correlation") +
     xlab("ICC Outcome") +
-    ylim(0, 0.7)
+    ylim(-0.1, 0.7)
   
   return(p)
 }
@@ -466,7 +613,7 @@ p2 <- ggplot(data, aes(x = time, y = y)) +
     aes(xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf),
     fill = "#E5E4E2", alpha = 0.05, inherit.aes = T
   ) +
-  geom_point(color = "#FC9D9A", size = 0.5) +                       
+  geom_point(color = "#c7835a", size = 0.5) +                       
   facet_wrap(~subject) +               
   labs(
     x = "Time", 
@@ -493,14 +640,25 @@ p2
 ```{r }
 ############ Table 7 #############
 ##################################
-sim_1$auc_value_base # row-wise
-sim_4$auc_value_base # rolling window
-
+round(sim_1$auc_value_base,2) # row-wise
+round(sim_4$auc_value_base,2) # rolling window
+sim_3$auc_value_base # subject-wise
 
 sim_4$auc_value
 
 
 test <- sim_4$ind_base[[1]] %>%
+  group_by(subject) %>%
+  filter(length(unique(true)) > 1) %>%
+  filter(sum(true == 1) > 0, sum(true == 0) > 0) %>%
+  summarise(
+    auc_val = pROC::auc(pROC::roc(as.numeric(as.character(true)), as.numeric(as.character(pred)), quiet = TRUE))[1],
+    .groups = "drop" # Ungroup after summarizing
+  )
+
+mean(test$auc_val)
+
+test <- sim_3$ind_base[[1]] %>%
   group_by(subject) %>%
   filter(length(unique(true)) > 1) %>%
   filter(sum(true == 1) > 0, sum(true == 0) > 0) %>%
@@ -539,11 +697,11 @@ plot_data = function(data_viz,spanpar){
     geom_smooth(se = FALSE, method = "loess",span = spanpar) +
     theme_minimal() +
     scale_color_manual(values = c(
-      "real_AUC.random.intercept.only." ="#B5E48C" ,
-      "real_AUC." = "#74C69D",
-      "movingwindow_AUC." ="#9EC5E7",
-      "movingwindow_AUC.random.intercept.only." = "#A2D2FF",
-      "subjectwise_AUC." ="#FFB5A7"
+      "real_AUC.random.intercept.only." ="#c7835a" ,
+      "real_AUC." = "#9c5435",
+      "movingwindow_AUC." ="#877fbf",
+      "movingwindow_AUC.random.intercept.only." = "#58538f",
+      "subjectwise_AUC." ="#40916c"
     ), 
     labels = c(
                "real_AUC.random.intercept.only."="Random Intercept only (Record-Wise)",
@@ -616,11 +774,11 @@ plot_data = function(data_viz,spanpar){
     geom_smooth(se = FALSE, method = "loess",span = spanpar) +
     theme_minimal() +
     scale_color_manual(values = c(
-      "real_cor_base" ="#B5E48C" ,
-      "real_cor" = "#74C69D",
-      "movingwindow_cor" = "#9EC5E7",
-      "movingwindow_cor_base" = "#A2D2FF",
-      "subjectwise_cor" ="#FFB5A7"
+      "real_cor_base" ="#c7835a" ,
+      "real_cor" = "#9c5435",
+      "movingwindow_cor" = "#877fbf",
+      "movingwindow_cor_base" = "#58538f",
+      "subjectwise_cor" ="#40916c"
     ), labels = c("real_cor_base"="Random Intercept only (Record-Wise)",
                   "real_cor" ="Random Forest (Record-Wise)",
                   "movingwindow_cor" ="Random Forest (Moving-Window) ",
@@ -672,6 +830,19 @@ ggsave("Figures/Figure10_BaselineContinious.jpg",
 ##################################
 
 result = read.csv("simulation_results_baseline.csv")
+title = paste("Performance of a Random Intercept Only Model (No Predictors Included)")
+
+
+result = read.csv("simulation_results_baseline_A21.csv")
+title = paste("Robustness Check 1: Performance of a Random Intercept Only Model (No Predictors Included)")
+
+
+
+result = read.csv("simulation_results_baseline_A22.csv")
+title = paste("Robustness Check 2: Performance of a Random Intercept Only Model (No Predictors Included)")
+
+
+
 p7 <- ggplot(result, aes(x=icc, y=auc_value_base)) +
   geom_point(alpha=0.5, size = 1.2, color = "#40916C") +
   #scale_size(range = c(.001, 6), name="") +
@@ -680,7 +851,7 @@ p7 <- ggplot(result, aes(x=icc, y=auc_value_base)) +
   ylab("Overall Performance (AUC)") +
   xlab("% of Total Variation Explained by Between Person Differences in the Outcome (ICC Outcome)") +
   guides(col = guide_colourbar()) +
-  ggtitle(paste("Performance of a Random Intercept Only Model (No Predictors Included)")) +
+  ggtitle(title) +
   geom_hline(yintercept = 0.5) +
   ylim(range= c(0.5,1)) +
     annotate("text", x = 0.5, y = 0.82, label =  "Performance increases as between person differences explain a \nlarger % of total variation in the outcome",  hjust = 0) +
@@ -705,13 +876,71 @@ ggsave(  "Figures/Figure8.jpg",
   width = 10,
   height = 5)
 
+ggsave(  "Figures/FigureA22.jpg",
+  plot = p7,
+  width = 10,
+  height = 5)
+
 ```
 
 
 Other things that were not presented in the paper (but used for a presentation):
 
+```{r }
+# --- PARAMETERS ---
+a_values <- c(0.00, 0.05)        # outcome effect
+b_values <- c(0.1, 0.5, 0.9)     # cross-subject variability
+c_values <- c(0.05, 0.25, 0.45)  # within-subject variability
+d <- 0.1                         # noise
+
+# --- COMPUTE SNR ---
+results <- expand.grid(a = a_values, b = b_values, c = c_values)
+
+results$var_signal <- results$a^2
+results$var_noise  <- results$b^2 + results$c^2 + d^2
+results$SNR_linear <- results$var_signal / results$var_noise
+results$SNR_dB     <- ifelse(results$SNR_linear > 0,
+                             10 * log10(results$SNR_linear),
+                             -Inf)
+
+# --- SHOW RESULTS ---
+print(round(results, 6))
+
+b_grid <- seq(0.1, 0.9, by = 0.05)
+c_grid <- seq(0.05, 0.45, by = 0.05)
+a <- 0.05
+
+grid <- expand.grid(b = b_grid, c = c_grid)
+grid$SNR_linear <- a^2 / (grid$b^2 + grid$c^2 + d^2)
+grid$SNR_dB <- 10 * log10(grid$SNR_linear)
+
+summary(grid$SNR_linear)
+summary(grid$SNR_dB)
+
+# Optional: visualize as heatmap
+library(ggplot2)
+ggplot(grid, aes(x = b, y = c, fill = SNR_linear)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(option = "plasma") +
+  labs(title = "SNR (dB) across b and c values",
+       x = "Cross-subject variability (b)",
+       y = "Within-subject variability (c)",
+       fill = "SNR (dB)") +
+  theme_minimal(base_size = 14)
 
 
+
+
+
+
+result <- read.csv("signal_to_noise.csv")
+mean(result$R2_marginal)
+median(result$R2_marginal)
+min(result$R2_marginal)
+max(result$R2_marginal)
+
+
+```
 
 ```{r }
 ## Try out
