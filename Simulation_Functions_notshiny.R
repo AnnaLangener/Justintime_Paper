@@ -2,6 +2,7 @@
 ### Simulation Functions #####
 ##############################
 
+library(CorBin)
 ### Helper Function ####
 
 estBetaParams <- function(mu, var) {
@@ -15,24 +16,39 @@ estBetaParams <- function(mu, var) {
 # Not used in this paper but could be added as a future adaptation
 # The functions to create dependencies over time are adapted from 
 # Bringmann et al., "Changing dynamics: TV-AR models using generalized additive modeling"
+# 
+# ## Probability varies over time and follows a sinus function
+# sine<-function(n_samples,time_effect,participant_mean, timevariability){ # TempDepen is the maximum absolute value of the function (time effect).  
+# 
+#   genfun=rep(NA,(n_samples)) 
+#   tt=1:(n_samples) #Defining a time parameter in order to create the sine function.
+#   
+#   genfun=(time_effect*participant_mean)*sin(timevariability*pi*tt/(n_samples)) + participant_mean #Here the actual sine function is created, we add TempDepen to have a value between 0 and 1       
+#   
+#   return(genfun)
+# } 
 
-## Probability varies over time and follows a sinus function
-sine<-function(n_samples,time_effect,participant_mean, timevariability){ # TempDepen is the maximum absolute value of the function (time effect).  
 
-  genfun=rep(NA,(n_samples)) 
-  tt=1:(n_samples) #Defining a time parameter in order to create the sine function.
-  
-  genfun=(time_effect*participant_mean)*sin(timevariability*pi*tt/(n_samples)) + participant_mean #Here the actual sine function is created, we add TempDepen to have a value between 0 and 1       
-  
-  return(genfun)
-} 
+# exchange: all variables share same correlation, rho = amount of that correlation
+# DCP: local correlation decay, nearby variables have more correlation (e.g., rho = seq(0.3, 0.05, length.out = 9))
+# 1 - dependent: only adjacent variables are correlated (Dejonckere chapter, ar parameter varied a lot)
+# General: lag structure can be specified, rho is a list
+
+# n = 1, one number of observation (or variables in our case), m = number of timepoints (given by the number of marginal probabilities)
+cBern(1, rep(0.5,90), 0.8, type="exchange")
 
 
+#Cross-subject variability b	0.1 – 0.9 (steps of 0.05)
+#Within-subject variability c	0.05 – 0.45 (steps of 0.05)
+
+# unreliable if signal to noise is smaller than one
+# signal to noise ()
+(sqrt(0.1))/(sqrt(0.1) + sqrt(0.45) +sqrt(0.9))
 
 
 
 ########## MAIN FUNCTIONS #############
-create_data <- function(n_features,n_samples,n_subjects,A,feature_std,B,C,overall_prob_outcome,sd_outcome,time_effect,timevariability){
+create_data <- function(n_features,n_samples,n_subjects,A,feature_std,B,C,overall_prob_outcome,sd_outcome,time_effect,time_type){
   
   y <- vector("numeric", length = n_subjects * n_samples) 
   subject_id <- rep(1:n_subjects, each = n_samples)  # Repeat subject IDs for each timepoint
@@ -44,34 +60,32 @@ create_data <- function(n_features,n_samples,n_subjects,A,feature_std,B,C,overal
   
   prob_l <- rbeta(n=n_subjects ,shape1 = para$alpha, shape2 = para$beta) # sample probability for each subject
   
-  prob_l = rep(prob_l, each = n_samples) 
-  # 
+
   # time_prob = c()
   # for(i in 1:length(prob_l)){
   # time_prob = c(time_prob,sine(n_samples,time_effect,prob_l[i],timevariability))
   # }
+  # 
+  # if(overall_prob_outcome > 0.5){
+  # time_prob = 1- sine(n_samples,time_effect,1-prob_l,timevariability)
+  # }else{
+  # time_prob = sine(n_samples,time_effect,prob_l,timevariability)
+  # }
   
-  if(overall_prob_outcome > 0.5){
-  time_prob = 1- sine(n_samples,time_effect,1-prob_l,timevariability)
-  }else{
-  time_prob = sine(n_samples,time_effect,prob_l,timevariability)
-  }
+  prob_matrix = rep(prob_l, each = n_samples) 
   
-  if(time_effect > 0){
-  prob_matrix = time_prob # add time effect
-  }else{
-  prob_matrix = prob_l
-  }
-  
-  #plot(time_prob[1000:2000])
-  # #plot(prob_l[0:1000])
-  # plot(prob_matrix)
-  
-  print(paste("Mean prob:",mean(prob_matrix)))
-  print(paste("SD prob:",sd(prob_matrix)))
-  
-  
-  data$y <- rbinom(n_subjects * n_samples, size = 1, prob = prob_matrix) #sample 0 or 1 for each subject & timepoint, prob_matrix indicates the probability for each subject
+  if(any(time_effect > 0)){
+    prob_subject <- list()
+    for(i in 1:n_subjects){
+      prob_subject[[i]] = cBern(1, rep(prob_l[i],n_samples),time_effect, type=time_type)
+
+    }
+    data$y <- unlist(prob_subject)
+    
+    }else{
+      
+      data$y <- rbinom(n_subjects * n_samples, size = 1, prob = prob_matrix) #sample 0 or 1 for each subject & timepoint, prob_matrix indicates the probability for each subject
+    }
   data$A = data$y
 
   # Simulate Features (adapted from Saeb et al. and https://aosmith.rbind.io/2018/04/23/simulate-simulate-part-2/)
@@ -90,18 +104,30 @@ create_data <- function(n_features,n_samples,n_subjects,A,feature_std,B,C,overal
   features_sample[[1]] <- features_sample_ABCstd
   features_sample[[2]] <- features_sample_Astd
   
+  
+  if(any(time_effect > 0)){
+  print("AR1 in outcome for predictor set")
+  features_sample[[1]]$A_lag[lag(data$y) == 0] = 0.5*-A # relationship to outcome lagged
+  features_sample[[1]]$A_lag[lag(data$y) == 1] = 0.5*A
+  
+  features_sample[[1]]$A_lag[is.na(features_sample[[1]]$A_lag)] = 0
+  }else{
+  features_sample[[1]]$A_lag = 0
+    
+  }
 
   
   for (i in 1:n_features) {
     
     if(length(B) == 1){
     feature_noise <- rep(feature_std * rnorm(1,mean = 0, sd = 1), each = n_subjects*n_samples) #d_e POPULATION LEVEL FEATURE GENERATING PROCESS
-    subjecteff = B *rnorm(n_subjects, mean = 0, sd = 1) #B * rnorm(n_subjects) 
+    subjecteff = B * rnorm(n_subjects, mean = 0, sd = 1) #B * rnorm(n_subjects) 
     subjecteff = rep(subjecteff, each = n_samples)
     timeeff = C * rnorm(n_subjects*n_samples, mean = 0, sd = 1) #C * rnorm(n_subjects*n_samples)
-    maineff = features_sample[[1]]$A
+    maineff = features_sample[[1]]$A #* rnorm(n_subjects*n_samples, mean = 0, sd = 1)
+    A_lag = features_sample[[1]]$A_lag # * rnorm(n_subjects*n_samples, mean = 0, sd = 1)
     
-    features_sample[[1]][,i] = maineff + feature_noise + subjecteff + timeeff  # ONlY THIS IS RELEVANT
+    features_sample[[1]][,i] = maineff + feature_noise + subjecteff + timeeff + A_lag # ONLY THIS IS RELEVANT
     features_sample[[1]][, paste("V", i, "_mean", sep = "")] <- subjecteff
     features_sample[[2]][,i] = maineff + feature_noise + timeeff 
     
@@ -110,13 +136,23 @@ create_data <- function(n_features,n_samples,n_subjects,A,feature_std,B,C,overal
       subjecteff = B[i] *rnorm(n_subjects, mean = 0, sd = 1) #B * rnorm(n_subjects) 
       subjecteff = rep(subjecteff, each = n_samples)
       timeeff = C[i] * rnorm(n_subjects*n_samples, mean = 0, sd = 1) #C * rnorm(n_subjects*n_samples)
-      maineff = features_sample[[1]]$A
+      maineff = features_sample[[1]]$A# * rnorm(n_subjects*n_samples, mean = 0, sd = 1)
+      maineff = features_sample[[1]]$A_lag# * rnorm(n_subjects*n_samples, mean = 0, sd = 1)
       
-      features_sample[[1]][,i] = maineff + feature_noise + subjecteff + timeeff 
+      features_sample[[1]][,i] = maineff + feature_noise + subjecteff + timeeff + A_lag
       features_sample[[1]][, paste("V", i, "_mean", sep = "")] <- subjecteff
       features_sample[[2]][,i] = maineff + feature_noise + timeeff 
     }
     
+  }
+  
+  if(any(time_effect > 0)){
+  for (i in 1:n_features) {
+    print("AR1 in predictor set")
+    lag = lag(features_sample[[1]][,i])
+    features_sample[[1]][-1,i] = features_sample[[1]][-1,i] + 0.5*lag[-1]
+  
+  }
   }
   return(features_sample)
 }
@@ -197,9 +233,20 @@ run_simulation <- function(features_sample,cv,n_bootstrap,testsize, seed = "1236
           data = features_sample[samples_train,], 
           family = binomial(link = "logit") 
         )
+        class_pred_base <- predict(Baseline, newdata = features_sample[samples_test,], re.form = ~(1 | subject), type = "response")
+        
+      }
+        if(cv == "subject-wise"){ 
+          Baseline <- glm(
+            train_Y ~ 1,  # intercept-only model
+            data = features_sample[features_sample$subject %in% subjects_train, ],
+            family = binomial(link = "logit")
+          )
+          class_pred_base <- predict(Baseline, newdata = features_sample[features_sample$subject %in% subjects_test,], type = "response")
+          
+        }
       
-      class_pred_base <- predict(Baseline, newdata = features_sample[samples_test,], re.form = ~(1 | subject), type = "response")
-      
+
       true_list_base[[i]]<- test_Y
       pred_list_base[[i]] <- as.numeric(as.character(class_pred_base))
       roc_curve_base <- pROC::roc(test_Y,  as.numeric(as.character(class_pred_base)),quiet = TRUE,direction = "<")
@@ -209,14 +256,14 @@ run_simulation <- function(features_sample,cv,n_bootstrap,testsize, seed = "1236
       acc_base[i] <- mean(as.numeric(as.character(class_pred_base2)) == test_Y)
       
       ind_base[[i]] = data.frame(subject = subject[[i]], true = true_list_base[[i]], pred = pred_list_base[[i]])
-      }
+      
     }
   } # end bootstrap (we don't use the bootstrap in the paper)
 
   if(cv == "row-wise"){ 
-    print(paste("Baseline Mean AUC:",mean(auc_value_base)))
-    print(paste("Baseline Mean Accuracy:",mean(acc_base)))
-    print("Model Results:")
+    # print(paste("Baseline Mean AUC:",mean(auc_value_base)))
+    # print(paste("Baseline Mean Accuracy:",mean(acc_base)))
+    # print("Model Results:")
     
   }
   
@@ -259,11 +306,11 @@ run_simulation <- function(features_sample,cv,n_bootstrap,testsize, seed = "1236
     overall_summary = overall_summary,
     ind_base = ind_base
   )
-  
-  print(paste("Mean AUC:",mean(auc_value)))
-  print(paste("Mean Accuracy:",mean(acc)))
-  print("Individual Results Summary:")
-  print(overall_summary)
+  # 
+  # print(paste("Mean AUC:",mean(auc_value)))
+  # print(paste("Mean Accuracy:",mean(acc)))
+  # print("Individual Results Summary:")
+  # print(overall_summary)
   return(results)
 } 
 ############################################
@@ -285,7 +332,7 @@ run_simulation_centering <- function(features_sample,cv,n_bootstrap,testsize, se
   pred_list_base <- list() 
   ind_base <- list()
   
-  print(cv)
+  #print(cv)
   
   for (i in 1:n_bootstrap) {
     
@@ -372,10 +419,10 @@ run_simulation_centering <- function(features_sample,cv,n_bootstrap,testsize, se
   } # end bootstrap
   
   if(cv == "row-wise"){ 
-    print(paste("Baseline Mean AUC:",mean(auc_value_base)))
-    print(paste("Baseline Mean Accuracy:",mean(acc_base)))
-    print("Model Results:")
-    
+    # print(paste("Baseline Mean AUC:",mean(auc_value_base)))
+    # print(paste("Baseline Mean Accuracy:",mean(acc_base)))
+    # print("Model Results:")
+    # 
   }
   
   results_summary <- lapply(ind, function(ind_result) {
@@ -416,11 +463,11 @@ run_simulation_centering <- function(features_sample,cv,n_bootstrap,testsize, se
     overall_summary = overall_summary,
     ind_base = ind_base
   )
-  
-  print(paste("Mean AUC:",mean(auc_value)))
-  print(paste("Mean Accuracy:",mean(acc)))
-  print("Individual Results Summary:")
-  print(overall_summary)
+  # 
+  # print(paste("Mean AUC:",mean(auc_value)))
+  # print(paste("Mean Accuracy:",mean(acc)))
+  # print("Individual Results Summary:")
+  # print(overall_summary)
   return(results)
 }      
 
@@ -466,7 +513,7 @@ run_simulation_slidingwindow <- function(features_sample,n_bootstrap,windowsize)
   pred_list_base <- list() 
   ind_base <- list()
   
-  print("sliding-window")
+ # print("sliding-window")
   
   for (i in 1:n_bootstrap) {
     #  Prepare training and testing sets
@@ -515,35 +562,41 @@ run_simulation_slidingwindow <- function(features_sample,n_bootstrap,windowsize)
       )
       
       #### Baseline
-      Baseline <- glmer(
-        "y ~ 1 + (1|subject)", # Random intercept for 'subject'
-        data = features_sample[features_sample$time %in% trainSlices[[k]],], 
-        family = "binomial" # Logistic regression
-      )
-      
-      class_pred_base <- predict(Baseline, newdata = features_sample[features_sample$time %in% testSlices[[k]],], re.form = ~(1 | subject), type = "response")
+      if(length(unique(features_sample$subject)) > 1){
+        print(length(unique(features_sample$subject)))
 
-      if (length(unique(test_Y)) == 2) {
-        roc_curve_base <- pROC::roc(test_Y,  as.numeric(as.character(class_pred_base)),quiet = TRUE,direction = "<")
-        auc_value_base_sw[k] <- pROC::auc(roc_curve_base)
-      } else {
-        auc_value_base_sw[k] <- NA
-      }
-      
-      class_pred_base2 <- ifelse(class_pred_base > 0.5, 1, 0)
-      acc_sw_base[k] <- mean(as.numeric(as.character(class_pred_base2)) == test_Y)
-      
-      ind_t_base <- rbind(
-        ind_t_base,
-        data.frame(
-          subject = as.character(features_sample$subject[features_sample$time %in% testSlices[[k]]]),
-          true = test_Y,                                   
-          pred = class_pred_base
+        Baseline <- glmer(
+          "y ~ 1 + (1|subject)", # Random intercept for 'subject'
+          data = features_sample[features_sample$time %in% trainSlices[[k]],], 
+          family = "binomial" # Logistic regression
         )
-      )
+        
+        class_pred_base <- predict(Baseline, newdata = features_sample[features_sample$time %in% testSlices[[k]],], re.form = ~(1 | subject), type = "response")
+       }else{
+         class_pred_base <- rep(mean(features_sample$y[features_sample$time %in% trainSlices[[k]]]),nrow(features_sample[features_sample$time %in% testSlices[[k]],]))
+       }
+        if (length(unique(test_Y)) == 2) {
+          roc_curve_base <- pROC::roc(test_Y,  as.numeric(as.character(class_pred_base)),quiet = TRUE,direction = "<")
+          auc_value_base_sw[k] <- pROC::auc(roc_curve_base)
+        } else {
+          auc_value_base_sw[k] <- NA
+        }
+        
+        class_pred_base2 <- ifelse(class_pred_base > 0.5, 1, 0)
+        acc_sw_base[k] <- mean(as.numeric(as.character(class_pred_base2)) == test_Y)
+        
+        ind_t_base <- rbind(
+          ind_t_base,
+          data.frame(
+            subject = as.character(features_sample$subject[features_sample$time %in% testSlices[[k]]]),
+            true = test_Y,                                   
+            pred = class_pred_base
+          )
+        )
       
       
-      print(paste("Window ",k,": ","Model: ", round(auc_value_sw[k],2), " Baseline: ",round(auc_value_base_sw[k],2), sep = ""))
+      
+      #print(paste("Window ",k,": ","Model: ", round(auc_value_sw[k],2), " Baseline: ",round(auc_value_base_sw[k],2), sep = ""))
       
     }
     
@@ -552,7 +605,7 @@ run_simulation_slidingwindow <- function(features_sample,n_bootstrap,windowsize)
     ind[[i]] <- ind_t
     ind_base[[i]] <- ind_t_base
     auc_value_base[i] <- pROC::auc(pROC::roc(as.numeric(as.character(ind_t_base$true)), as.numeric(as.character(ind_t_base$pred)),direction = "<"))
-  } # end bootstrap
+    } # end bootstrap
  
   
   results_summary <- lapply(ind, function(ind_result) {
@@ -586,19 +639,22 @@ run_simulation_slidingwindow <- function(features_sample,n_bootstrap,windowsize)
     data.frame(mean = x$mean_auc, sd = x$sd_auc, percent_above_0_5 = x$percent_above_0_5, total_n = x$total_n)
   }))
   
-  results <- list(
-    auc_value = auc_value,
-    ind = ind,
-    overall_summary = overall_summary,
-    ind_base = ind_base,
-    auc_value_base = auc_value_base
-  )
   
-  print(paste("Baseline Mean AUC:",mean(auc_value_base)))
-  print("Model Results:")
-  print(paste("Mean AUC:",mean(auc_value)))
-  print("Individual Results Summary:")
-  print(overall_summary)
+
+    results <- list(
+      auc_value = auc_value,
+      ind = ind,
+      overall_summary = overall_summary,
+      ind_base = ind_base,
+      auc_value_base = auc_value_base
+    )
+    
+    
+    # print(paste("Baseline Mean AUC:",mean(auc_value_base)))
+  # print("Model Results:")
+  # print(paste("Mean AUC:",mean(auc_value)))
+  # print("Individual Results Summary:")
+  # print(overall_summary)
   return(results)
 }      
 
